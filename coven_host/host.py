@@ -134,7 +134,7 @@ class Handler(BaseHTTPRequestHandler):
                     if existing == path:
                         current, previous_size = revision, length
                     elif existing.startswith(path + "/") or path.startswith(existing + "/"):
-                        self.error(409, "file/directory name collision")
+                        self.error(422, "file/directory name collision")
                         return
                 if current != expected:
                     self.error(412, "remote revision changed; sync again")

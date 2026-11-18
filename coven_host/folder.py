@@ -1,4 +1,5 @@
 import contextlib
+import ctypes
 import json
 import os
 from pathlib import Path
@@ -9,6 +10,18 @@ from .common import CASTLE, MAX_FILES, MAX_TOTAL, Problem, digest, dirfd, exclud
 
 
 MANIFEST = {"version": 1, "id": CASTLE, "displayName": "Demo Castle"}
+
+
+def exchange(source_fd, source, destination_fd, destination):
+    """Keep the exact inode displaced by atomic replacement, even if an editor raced us."""
+    libc = ctypes.CDLL(None, use_errno=True)
+    if not hasattr(libc, "renameat2"):
+        raise Problem("this platform does not support safe atomic file exchange (Linux renameat2)")
+    rename = libc.renameat2
+    rename.argtypes = (ctypes.c_int, ctypes.c_char_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_uint)
+    if rename(source_fd, os.fsencode(source), destination_fd, os.fsencode(destination), 2) != 0:
+        error = ctypes.get_errno()
+        raise OSError(error, f"atomic exchange failed: {os.strerror(error)}", destination)
 
 
 class Folder:
@@ -62,7 +75,7 @@ class Folder:
         except OSError as exc:
             raise Problem(f"root unavailable or unsafe: {self.root} ({exc.strerror}); mount or restore it") from None
 
-    def scan(self, sizes=None):
+    def scan(self, sizes=None, directories=None):
         self.check()
         hashes = {}
         total = count = 0
@@ -75,9 +88,11 @@ class Folder:
                 path = f"{prefix}/{name}"
                 validate_path(path)
                 count += 1
-                if count > 2 * MAX_FILES:
-                    raise Problem("Castle exceeds 2000 file and directory entries")
+                if count > 16 * MAX_FILES:
+                    raise Problem("Castle exceeds 16000 file and directory entries")
                 if stat.S_ISDIR(os.stat(name, dir_fd=fd, follow_symlinks=False).st_mode):
+                    if directories is not None:
+                        directories.add(path)
                     with dirfd(name, fd) as child:
                         walk(child, path)
                 else:
@@ -110,14 +125,17 @@ class Folder:
         relative = "/".join(parts[:-1])
         name = parts[-1]
         # Stage privately, on the same filesystem; never expose a partial document.
-        with dirfd(self.state) as scratch, self.opened() as base:
-            tmp = "stage-" + uuid4().hex
+        staging = self.state if expected is None else self.state / "recovery"
+        with dirfd(staging, create=True) as scratch, self.opened() as base:
+            tmp = ("stage-" if expected is None else "exchange-") + uuid4().hex
+            retain = False
             try:
                 with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600,
                                        dir_fd=scratch), "wb") as file:
                     file.write(data)
                     file.flush()
                     os.fsync(file.fileno())
+                os.fsync(scratch)
                 with dirfd(parts[0], base) as area:
                     # The scope directory must already exist; create only nested folders.
                     with dirfd("/".join(parts[1:-1]), area, create=True) as parent:
@@ -138,12 +156,19 @@ class Folder:
                                 os.link(tmp, name, src_dir_fd=scratch, dst_dir_fd=current)
                                 os.unlink(tmp, dir_fd=scratch)
                             else:
-                                os.replace(tmp, name, src_dir_fd=scratch, dst_dir_fd=current)
+                                exchange(scratch, tmp, current, name)
+                                retain = True
+                                os.fsync(current)
+                                os.fsync(scratch)
+                                if digest(read_at(scratch, tmp)) != expected:
+                                    raise Problem(f"{path}: an edit raced replacement; recover it from {staging / tmp}")
+                                retain = False
                             os.fsync(current)
-                            os.fsync(scratch)
             finally:
-                with contextlib.suppress(FileNotFoundError):
-                    os.unlink(tmp, dir_fd=scratch)
+                if not retain:
+                    with contextlib.suppress(FileNotFoundError):
+                        os.unlink(tmp, dir_fd=scratch)
+                    os.fsync(scratch)
 
 
 def read_external(path):

@@ -116,11 +116,13 @@ class Client:
             item = remote.upload(path, data, expected, operation)
         except Rejected as exc:
             # Definitive rejection. A lost or invalid acknowledgement leaves the outbox intact.
-            if exc.status in {412, 413}:
+            if exc.status in {412, 413, 422}:
+                self.archive(path, "rejected", data)
                 with self.db() as db:
                     db.execute("DELETE FROM pending")
                 if exc.status == 412:
                     return
+                return f"{path}: {exc}"
             raise
         with self.db() as db:
             self.record(db, path, item)
@@ -184,27 +186,55 @@ class Client:
             except FileNotFoundError:
                 pass
 
+    def retained_exchanges(self):
+        recovery = self.state / "recovery"
+        try:
+            with dirfd(recovery) as fd:
+                return sorted(recovery / name for name in os.listdir(fd)
+                              if re.fullmatch(r"exchange-[a-f0-9]{32}", name))
+        except FileNotFoundError:
+            return []
+
+    def check_recovery(self):
+        if self.retained_exchanges():
+            raise Problem("interrupted or raced replacement; inspect recovery paths in status, "
+                          "move the retained copies to a safe location, then sync again")
+
+    def check_revisions(self, items):
+        for path, (revision, sha) in self.baseline().items():
+            item = items.get(path)
+            if item is None or item[0] < revision or (item[0] == revision and item[1] != sha):
+                raise Problem(f"{path}: host history missing or rolled back; check persistent host storage")
+
     def reconcile(self, folder):
+        self.check_recovery()
         self.clean_stages()
-        sizes = {}
-        local = folder.scan(sizes)
+        sizes, directories = {}, set()
+        local = folder.scan(sizes, directories)
         self.recover_incoming(local)
         remote = self.remote()
-        self.inventory(remote)
-        self.flush_pending(remote)
+        self.check_revisions(self.inventory(remote))
+        errors = []
+        replay_error = self.flush_pending(remote)
+        if replay_error:
+            errors.append(replay_error)
         items = self.inventory(remote)
+        self.check_revisions(items)
         base = self.baseline()
         with self.db() as db:
             conflicts = {row["path"]: row for row in db.execute("SELECT * FROM conflicts")}
-        errors = []
-        for path in sorted(local.keys() | items.keys() | base.keys()):
+        paths = local.keys() | items.keys() | base.keys()
+        # Shrinking uploads first lets a full Castle make room for growing files.
+        for path in sorted(paths, key=lambda p: (sizes.get(p, 0) - items.get(p, (0, "", 0))[2], p)):
             sha, item = local.get(path), items.get(path)
             old_revision, old_sha = base.get(path, (0, None))
-            if old_revision and item is None:
-                errors.append(f"{path}: remote baseline missing; check persistent host storage")
-                continue
             if sha is None and old_revision:
                 errors.append(f"{path}: deletion propagation unsupported; remote copy preserved")
+                continue
+            if ((item and (path in directories or any(parent in local for parent in parents(path))))
+                    or (sha is not None and any(other.startswith(path + "/") or
+                                                 path.startswith(other + "/") for other in items))):
+                errors.append(f"{path}: file/directory collision; move the unsynchronized local entry")
                 continue
             if path in conflicts:
                 row = conflicts[path]
@@ -220,7 +250,9 @@ class Client:
             elif item and item[1] != old_sha and sha != old_sha and sha is not None:
                 self.conflict(path, folder, remote, sha, item)
             elif item and sha == old_sha:
+                new_dirs = set(parents(path)) - directories
                 if ((path not in sizes and len(sizes) >= MAX_FILES)
+                        or len(directories) + len(new_dirs) + len(sizes) + (path not in sizes) > 16 * MAX_FILES
                         or sum(sizes.values()) - sizes.get(path, 0) + item[2] > MAX_TOTAL):
                     errors.append(f"{path}: download would exceed local Castle limits")
                     continue
@@ -232,6 +264,7 @@ class Client:
                     self.record(db, path, item)
                     db.execute("DELETE FROM incoming")
                 sizes[path] = len(data)
+                directories.update(new_dirs)
             elif sha is not None:
                 data = folder.read(path)
                 if data is None or digest(data) != sha:
@@ -241,7 +274,9 @@ class Client:
                 with self.db() as db:
                     db.execute("INSERT INTO pending VALUES (1, ?, ?, ?, ?)",
                                (path, expected, uuid4().hex, data))
-                self.flush_pending(remote)
+                error = self.flush_pending(remote)
+                if error and error not in errors:
+                    errors.append(error)
 
         with self.db() as db:
             if db.execute("SELECT 1 FROM conflicts").fetchone():
@@ -268,6 +303,7 @@ class Client:
 
     def resolve(self, folder, path, choice, merged):
         validate_path(path)
+        self.check_recovery()
         with self.db() as db:
             row = db.execute("SELECT * FROM conflicts WHERE path=?", (path,)).fetchone()
         if row is None:
@@ -311,12 +347,16 @@ class Client:
                              if local.get(path) != base.get(path, (None, None))[1]}
             deleted = base.keys() - local.keys()
             if deleted:
+                phase = "needs attention"
                 error = "deletion propagation unsupported; remote copy preserved: " + ", ".join(sorted(deleted))
         except (Problem, OSError) as exc:
             pending_paths = None
             phase, error = "needs attention", str(exc)
+        retained = self.retained_exchanges()
         if active:
             phase = "syncing"
+        elif retained:
+            phase, error = "needs attention", "inspect and move retained replacement copies before syncing"
         elif phase == "syncing":
             phase, error = "needs attention", "sync stopped before reconciliation; run sync"
         elif phase == "synced" and (pending_paths or pending or conflicts):
@@ -330,5 +370,13 @@ class Client:
         for conflict in conflicts:
             print(f"  {conflict['path']}\n    local: {self.state / 'recovery' / conflict['local']}"
                   f"\n    remote: {self.state / 'recovery' / conflict['remote']}")
+        for copy in retained:
+            print(f"Retained interrupted replacement: {copy}")
         if error:
             print(f"Action: {error}")
+
+
+def parents(path):
+    while path.count("/") > 1:
+        path = path.rsplit("/", 1)[0]
+        yield path

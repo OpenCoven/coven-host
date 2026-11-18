@@ -59,9 +59,10 @@ class Remote:
                     error = {
                         400: "invalid request or unsupported path", 401: "check the token file",
                         404: "file or Castle not found; retry reconciliation",
-                        409: "check host identity or file/directory collision",
+                        409: "check host identity or operation ID",
                         412: "remote revision changed; sync again",
                         413: "upload exceeds Castle limits",
+                        422: "file/directory collision; move the unsynchronized local entry",
                     }.get(response.status, "check server and tunnel")
                     raise Rejected(response.status, error)
                 if len(body) > limit:

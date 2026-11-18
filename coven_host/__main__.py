@@ -115,8 +115,11 @@ def execute(args):
         delay = 2
         previous = None
         while True:
-            with locked(state):
-                result = client.sync(folder)
+            with locked(state, required=False) as acquired:
+                result = client.sync(folder) if acquired else None
+            if result is None:
+                time.sleep(0.25)
+                continue
             if result != previous:
                 print(": ".join(filter(None, result)), flush=True)
                 previous = result
