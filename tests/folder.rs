@@ -109,7 +109,7 @@ fn rejects_windows_token_after_another_principal_gains_read_access() {
     folder.initialize().unwrap();
     fs::rename(&path, root.join("Coven/Castles/demo/files/shared")).unwrap();
     folder
-        .replace("files/shared", b"new", Some(&digest(&vec![b'A'; 43])))
+        .replace("files/shared", b"new", Some(&digest(&[b'A'; 43])))
         .unwrap();
     let saved = folder.previous_versions().unwrap();
     assert_eq!(token_from(&saved[0]).unwrap(), "A".repeat(43));
