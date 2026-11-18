@@ -19,10 +19,10 @@ def bundle(assets: Path, guide: Path) -> None:
     for name in INSTALLERS:
         if name not in html or not (assets / name).is_file():
             raise ValueError(f"Missing installer or download link for {name}")
-    marker = '<meta name="asset-location" content="release">'
+    marker = '<html lang="en" data-distribution="release">'
     if html.count(marker) != 1:
         raise ValueError("The guide must declare the release asset location once")
-    local_guide = html.replace(marker, '<meta name="asset-location" content="offline">')
+    local_guide = html.replace(marker, '<html lang="en" data-distribution="offline">')
     for name in INSTALLERS:
         local_guide = local_guide.replace(
             f'href="https://github.com/OpenCoven/coven-host/releases/download/v{VERSION}/{name}"',

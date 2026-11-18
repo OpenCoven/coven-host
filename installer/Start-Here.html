@@ -1,9 +1,8 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-distribution="release">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="asset-location" content="release">
   <meta name="referrer" content="no-referrer">
   <title>Install Coven Host</title>
   <style>
@@ -20,7 +19,7 @@
     button, select, textarea { color: inherit; background: transparent; border: 1px solid #879c90; }
     select { display: block; width: 100%; font: inherit; padding: .65rem; margin: .4rem 0 .8rem; border-radius: .5rem; }
     textarea { width: 100%; min-height: 15rem; padding: .75rem; font: .85rem/1.45 ui-monospace, monospace; }
-    [hidden] { display: none !important; }
+    html[data-distribution="offline"] .online-only, html[data-distribution="release"] .offline-only, [hidden] { display: none !important; }
     :focus-visible { outline: 3px solid #3785c6; outline-offset: 3px; }
     @media (prefers-color-scheme: dark) { :root { background: #15221e; color: #e4ede8; } main, details, select { background: #21332b; } a { color: #9adcb8; } .primary { background: #a1dec1; color: #172e24; } }
   </style>
@@ -43,7 +42,8 @@
     <p id="instruction" aria-live="polite">Use this page on your desktop or choose a platform above.</p>
     <a class="primary" id="download" hidden>Download installer</a>
     <a id="fallback" hidden>Use the portable download</a>
-    <p id="access">Downloads require access to the private OpenCoven repository. Once downloaded, the installers work offline.</p>
+    <p class="online-only">Downloads require access to the private OpenCoven repository. Once downloaded, the installers work offline.</p>
+    <p class="offline-only">Extract the entire offline kit to one folder. Open the installer for this computer from that folder.</p>
     <noscript>
       <p>JavaScript is turned off. Choose an installer directly.</p>
       <ul>
@@ -73,11 +73,12 @@
     <button type="button" id="save">Save report</button>
     <p id="notice" role="status"></p>
   </details>
-  <p><a href="https://github.com/OpenCoven/coven-host/releases/tag/v0.1.1">All downloads and checksums</a> · <a href="https://github.com/OpenCoven/coven-host/blob/v0.1.1/docs/setup.md">Installation help</a></p>
+  <p class="offline-only"><a href="./SHA256SUMS">Checksums for the files in this kit</a></p>
+  <p class="online-only"><a href="https://github.com/OpenCoven/coven-host/releases/tag/v0.1.1">All downloads and checksums</a> · <a href="https://github.com/OpenCoven/coven-host/blob/v0.1.1/docs/setup.md">Installation help</a></p>
   <script>
     'use strict';
     const release = '0.1.1';
-    const offline = document.querySelector('meta[name="asset-location"]').content === 'offline';
+    const offline = document.documentElement.dataset.distribution === 'offline';
     const base = offline ? './' : 'https://github.com/OpenCoven/coven-host/releases/download/v' + release + '/';
     const packages = {
       mac: ['Coven-Host-0.1.1-macOS.zip', 'Open the downloaded archive, then open Coven Host.'],
@@ -97,7 +98,9 @@
     const byId = id => document.getElementById(id);
     const device = byId('device');
     if (offline) {
-      byId('access').textContent = 'These installers are included in the extracted folder. If your browser saves another copy, open the file from your downloads.';
+      symptoms.download = ['KIT_FILE_MISSING', 'open', 'The extracted folder contains the selected installer', 'User reports that the installer file is missing', 'Extract the entire offline ZIP into one folder and reopen Start-Here.html there. If the file is still missing, obtain a fresh copy of the kit.'];
+      symptoms.policy[4] = 'Check the installer against SHA256SUMS in the extracted folder. On a managed device, ask your administrator to approve it.';
+      byId('symptom').querySelector('[value="download"]').textContent = 'Installer missing from the extracted folder';
       byId('download').textContent = 'Open installer file';
     }
     function update() {
@@ -116,7 +119,7 @@
         schema: 1, product: 'Coven Host', release, timestampUTC: new Date().toISOString(),
         source: 'Download guide (user-selected symptom)', distribution: offline ? 'offline kit' : 'GitHub release', code, stage,
         platform: device.selectedOptions[0].text, asset: pkg ? pkg[0] : null,
-        expected, observed, reproduction: 'Choose the reported platform and open its release download.',
+        expected, observed, reproduction: offline ? 'Extract the offline kit and open the selected installer in that folder.' : 'Choose the reported platform and open its release download.',
         nextAction: next
       }, null, 2);
       byId('notice').textContent = '';
