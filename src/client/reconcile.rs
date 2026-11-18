@@ -89,12 +89,16 @@ impl Client {
         }
 
         let mut remote = self.remote(db)?;
-        check_history(&baseline(db)?, &self.inventory(db, &mut remote)?)?;
+        let conflicts = conflicts(db)?;
+        check_history(
+            &baseline(db)?,
+            &conflicts,
+            &self.inventory(db, &mut remote)?,
+        )?;
         let mut errors: Vec<_> = self.flush_pending(db, &remote)?.into_iter().collect();
         let items = self.inventory(db, &mut remote)?;
         let base = baseline(db)?;
-        check_history(&base, &items)?;
-        let conflicts = conflicts(db)?;
+        check_history(&base, &conflicts, &items)?;
         let all: BTreeSet<_> = scan
             .files
             .keys()

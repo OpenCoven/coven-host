@@ -191,7 +191,7 @@ impl Dir {
         valid_component(name)?;
         let file = OpenOptions::new()
             .read(true)
-            .share_mode(FILE_SHARE_READ)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
             .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
             .open(self.path.join(name))?;
         fingerprint(&file)?;
@@ -213,6 +213,41 @@ impl Dir {
     // files are flushed individually; journal publication uses a write-through move.
     pub fn sync(&self) -> Result<()> {
         Ok(())
+    }
+
+    pub fn open_lock(&self, name: &OsStr) -> Result<File> {
+        valid_component(name)?;
+        let file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE)
+            .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+            .open(self.path.join(name))?;
+        fingerprint(&file)?;
+        check_spelling(&file, name)?;
+        Ok(file)
+    }
+
+    pub fn move_new(&self, source: &str, dest: &Dir, name: &str) -> Result<()> {
+        // A same-volume move preserves the original file DACL. A private parent
+        // alone does not exclude Windows principals with traverse-check bypass.
+        let file = self.open_file(source.as_ref())?;
+        if security::check_private(&file).is_err() {
+            let writable = OpenOptions::new()
+                .access_mode(WRITE_DAC | READ_CONTROL | FILE_READ_ATTRIBUTES)
+                .share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE)
+                .custom_flags(FILE_FLAG_OPEN_REPARSE_POINT)
+                .open(self.path.join(source))?;
+            ensure!(
+                fingerprint(&file)? == fingerprint(&writable)?,
+                "backup changed while securing it"
+            );
+            security::protect(&writable)?;
+        }
+        drop(file);
+        move_new(&self.path.join(source), &dest.path.join(name))
     }
 
     pub fn remove(&self, name: &str) -> Result<()> {
@@ -304,6 +339,11 @@ pub(super) fn install(
     let journal = format!("replace-{id}");
     let backup = format!("backup-{id}");
     let pending = format!("prepare-{id}");
+    let previous = expected
+        .map(|hash| {
+            super::previous::PreviousVersion::reserve(parent, name, scratch, stage, path, hash)
+        })
+        .transpose()?;
     let record = Journal {
         path: path.into(),
         before: expected.map(str::to_owned),
@@ -312,7 +352,7 @@ pub(super) fn install(
     };
     write_new(scratch, &pending, &serde_json::to_vec(&record)?)?;
     move_new(&scratch.path.join(&pending), &scratch.path.join(&journal))?;
-    let Some(before) = expected else {
+    let (Some(before), Some(previous)) = (expected, previous) else {
         let result = move_new(&source, &target);
         if result.is_err() {
             // Check both names before discarding an unpublished private transfer.
@@ -344,7 +384,7 @@ pub(super) fn install(
             && staged.is_none()
             && displaced.as_deref() == Some(before)
         {
-            scratch.remove(&backup)?;
+            previous.promote(scratch, &backup)?;
             scratch.remove(&journal)?;
             return Ok(());
         }
@@ -407,9 +447,23 @@ pub(super) fn inspect(folder: &Folder, dir: &Dir, name: &str) -> Result<Value> {
         }
     );
     let backup = format!("backup-{id}");
+    let previous_path = record
+        .before
+        .as_deref()
+        .map(|hash| -> Result<PathBuf> {
+            Ok(super::previous::archive_path(dir)?
+                .join(&record.path)
+                .join(super::previous::name(id, hash)?))
+        })
+        .transpose()?;
+    let previous = previous_path.as_ref().map(|p| {
+        observe(
+            missing_or(super::read_external(p, MAX_FILE)).map(|v| v.map(|bytes| digest(&bytes))),
+        )
+    });
     Ok(
         json!({"journal":dir.path.join(name),"path":record.path,"expected":record.before,"incoming":record.after,
         "destination":observe(destination),"stagingPath":dir.path.join(&stage),"staging":observe(file_hash(dir,&stage)),
-        "backupPath":dir.path.join(&backup),"backup":observe(file_hash(dir,&backup))}),
+        "backupPath":dir.path.join(&backup),"backup":observe(file_hash(dir,&backup)), "previousPath":previous_path, "previous":previous}),
     )
 }

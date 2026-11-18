@@ -105,4 +105,97 @@ fn rejects_windows_token_after_another_principal_gains_read_access() {
         String::from_utf8_lossy(&acl.stderr)
     );
     assert!(token_from(&path).is_err());
+    let folder = Folder::new(&root.join("Coven"), &root.join("state"));
+    folder.initialize().unwrap();
+    fs::rename(&path, root.join("Coven/Castles/demo/files/shared")).unwrap();
+    folder
+        .replace("files/shared", b"new", Some(&digest(&vec![b'A'; 43])))
+        .unwrap();
+    let saved = folder.previous_versions().unwrap();
+    assert_eq!(token_from(&saved[0]).unwrap(), "A".repeat(43));
+}
+
+#[test]
+fn late_save_through_open_handle_survives_multiple_downloads() {
+    use std::io::{Seek, Write};
+    let (tmp, castle, folder) = fixture();
+    let local = castle.join("files/note.md");
+    fs::write(&local, b"base").unwrap();
+    let mut options = fs::OpenOptions::new();
+    options.write(true);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{
+            FILE_SHARE_DELETE, FILE_SHARE_READ, FILE_SHARE_WRITE,
+        };
+        options.share_mode(FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE);
+    }
+    let mut first_editor = options.open(&local).unwrap();
+    folder
+        .replace("files/note.md", b"next", Some(&digest(b"base")))
+        .unwrap();
+    folder
+        .replace("files/note.md", b"base", Some(&digest(b"next")))
+        .unwrap();
+    let mut second_editor = options.open(&local).unwrap();
+    folder
+        .replace("files/note.md", b"final", Some(&digest(b"base")))
+        .unwrap();
+    for (handle, data) in [
+        (&mut first_editor, b"late one"),
+        (&mut second_editor, b"late two"),
+    ] {
+        handle.rewind().unwrap();
+        handle.write_all(data).unwrap();
+        handle.sync_all().unwrap();
+    }
+    assert_eq!(fs::read(&local).unwrap(), b"final");
+    let saved = folder.previous_versions().unwrap();
+    assert!(saved.iter().all(|p| {
+        p.parent()
+            .unwrap()
+            .ends_with("previous-versions/files/note.md")
+    }));
+    assert_eq!(saved.len(), 3);
+    let baselines: Vec<_> = saved
+        .iter()
+        .filter(|p| {
+            p.file_name()
+                .unwrap()
+                .to_string_lossy()
+                .contains(&digest(b"base"))
+        })
+        .map(|p| fs::read(p).unwrap())
+        .collect();
+    assert!(baselines.contains(&b"late one".to_vec()) && baselines.contains(&b"late two".to_vec()));
+    assert!(folder.recoveries().unwrap().is_empty());
+    assert_eq!(
+        fs::read_dir(tmp.path().join("state/recovery"))
+            .unwrap()
+            .count(),
+        0
+    );
+}
+
+#[test]
+fn full_previous_versions_directory_preserves_current_file() {
+    let (tmp, castle, folder) = fixture();
+    let archive = tmp
+        .path()
+        .canonicalize()
+        .unwrap()
+        .join("state/previous-versions");
+    private_dir(&archive).unwrap();
+    let huge = fs::File::create(archive.join("retained")).unwrap();
+    huge.set_len(coven_host::MAX_TOTAL as u64).unwrap();
+    drop(huge);
+    let dest = castle.join("files/item");
+    fs::write(&dest, b"old").unwrap();
+    let err = folder
+        .replace("files/item", b"new", Some(&digest(b"old")))
+        .unwrap_err();
+    assert!(err.to_string().contains("move") && err.to_string().contains("previous-versions"));
+    assert_eq!(fs::read(&dest).unwrap(), b"old");
+    assert!(folder.recoveries().unwrap().is_empty());
 }

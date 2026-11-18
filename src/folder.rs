@@ -14,6 +14,7 @@ mod native;
 #[path = "folder/windows.rs"]
 mod native;
 use native::Dir;
+mod previous;
 
 #[derive(Debug, Default)]
 pub struct Scan {
@@ -296,6 +297,17 @@ impl Folder {
         Ok(())
     }
 
+    pub fn previous_versions(&self) -> Result<Vec<PathBuf>> {
+        let mut files = previous::list(&self.state.join("previous-versions"))?;
+        // Status also reports the root availability error separately. State-side
+        // versions remain available while a removable or unsafe root is offline.
+        if Dir::open(&self.root, false).is_ok() {
+            files.extend(previous::list(&self.root.join(".coven-previous-versions"))?);
+        }
+        files.sort();
+        Ok(files)
+    }
+
     pub fn replacement_status(&self) -> Result<serde_json::Value> {
         #[cfg(windows)]
         {
@@ -474,6 +486,45 @@ mod tests {
             assert_eq!(report[0]["backup"]["sha256"], digest(b"offline edit"));
             assert_eq!(report[0]["destination"]["sha256"], digest(b"downloaded"));
             assert_eq!(report[0]["staging"]["missing"], true);
+        }
+    }
+
+    pub(super) const CRASH_AT_PROMOTION: &str = "COVEN_HOST_TEST_EXIT_AFTER_VERSION_PROMOTION";
+
+    #[test]
+    fn restart_after_promotion_preserves_version_and_journal_evidence() {
+        if let Some(path) = std::env::var_os(CRASH_AT_PROMOTION) {
+            let root = PathBuf::from(path);
+            let folder = Folder::new(&root.join("Coven"), &root.join("state"));
+            folder
+                .replace("files/item", b"downloaded", Some(&digest(b"offline edit")))
+                .unwrap();
+            panic!("expected exit after promotion");
+        }
+        let (tmp, folder, parent, scratch) = fixture();
+        write_new(&parent, "item", b"offline edit").unwrap();
+        drop(parent);
+        drop(scratch);
+        let status = std::process::Command::new(std::env::current_exe().unwrap())
+            .args([
+                "--exact",
+                "folder::tests::restart_after_promotion_preserves_version_and_journal_evidence",
+            ])
+            .env(CRASH_AT_PROMOTION, tmp.path().canonicalize().unwrap())
+            .status()
+            .unwrap();
+        assert_eq!(status.code(), Some(92));
+        assert_eq!(folder.read("files/item").unwrap().unwrap(), b"downloaded");
+        let saved = folder.previous_versions().unwrap();
+        assert_eq!(saved.len(), 1);
+        assert_eq!(fs::read(&saved[0]).unwrap(), b"offline edit");
+        #[cfg(windows)]
+        {
+            assert_eq!(folder.recoveries().unwrap().len(), 1);
+            let row = &folder.replacement_status().unwrap()[0];
+            assert_eq!(row["previous"]["sha256"], digest(b"offline edit"));
+            assert_eq!(row["backup"]["missing"], true);
+            assert_eq!(row["destination"]["sha256"], digest(b"downloaded"));
         }
     }
 

@@ -78,7 +78,7 @@ impl User {
     }
 }
 
-pub(super) fn mkdir(path: &Path) -> Result<()> {
+fn private_descriptor() -> Result<Local> {
     let sid = User::current()?.sid_string()?;
     let sddl = format!("O:{sid}D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)");
     let text = wide(OsStr::new(&sddl))?;
@@ -94,10 +94,29 @@ pub(super) fn mkdir(path: &Path) -> Result<()> {
     {
         return Err(io::Error::last_os_error().into());
     }
-    let _hold = Local(descriptor);
+    Ok(Local(descriptor))
+}
+
+pub(super) fn protect(file: &File) -> Result<()> {
+    let descriptor = private_descriptor()?;
+    if unsafe {
+        SetKernelObjectSecurity(
+            file.as_raw_handle(),
+            DACL_SECURITY_INFORMATION | PROTECTED_DACL_SECURITY_INFORMATION,
+            descriptor.0,
+        )
+    } == 0
+    {
+        return Err(io::Error::last_os_error().into());
+    }
+    check_private(file)
+}
+
+pub(super) fn mkdir(path: &Path) -> Result<()> {
+    let descriptor = private_descriptor()?;
     let attrs = SECURITY_ATTRIBUTES {
         nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
-        lpSecurityDescriptor: descriptor,
+        lpSecurityDescriptor: descriptor.0,
         bInheritHandle: 0,
     };
     let name = wide(path.as_os_str())?;

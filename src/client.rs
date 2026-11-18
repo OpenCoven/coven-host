@@ -306,13 +306,12 @@ impl Client {
         let db = self.db(false)?;
         let folder = Folder::new(&self.root(&db)?, &self.state);
         self.check_recovery(&folder)?;
-        let conflict = conflicts(&db)?
-            .remove(path)
-            .context("no recorded conflict")?;
+        let conflicts = conflicts(&db)?;
+        let conflict = conflicts.get(path).context("no recorded conflict")?;
         let scan = folder.scan()?;
         let mut remote = self.remote(&db)?;
         let items = self.inventory(&db, &mut remote)?;
-        check_history(&baseline(&db)?, &items)?;
+        check_history(&baseline(&db)?, &conflicts, &items)?;
         let item = items
             .get(path)
             .context("remote conflict input is missing")?;
@@ -408,8 +407,26 @@ impl Client {
             }
         };
         let recovery = self.state.join("recovery");
-        let conflicts: Vec<_>=conflicts(&db)?.into_iter().map(|(p,c)|json!({"path":p,"local":recovery.join(c.local),"remote":recovery.join(c.remote),"revision":c.revision})).collect();
+        let conflicts: Vec<_> = conflicts(&db)?
+            .into_iter()
+            .map(|(path, conflict)| {
+                json!({
+                    "path": path,
+                    "local": recovery.join(conflict.local),
+                    "remote": recovery.join(conflict.remote),
+                    "revision": conflict.revision
+                })
+            })
+            .collect();
         let retained = match self.retained(&folder) {
+            Ok(paths) => paths,
+            Err(e) => {
+                state = "needs attention".into();
+                error = format!("{e:#}");
+                Vec::new()
+            }
+        };
+        let previous_versions = match folder.previous_versions() {
             Ok(paths) => paths,
             Err(e) => {
                 state = "needs attention".into();
@@ -429,20 +446,55 @@ impl Client {
             state = "needs attention".into();
             error = "local work pending; run sync".into();
         }
-        Ok(
-            json!({"root":root,"remote":setting(&db,"url")?,"contact":setting(&db,"contact")?,"phase":state,"error":error,"pendingPaths":count,"replacementStatus":folder.replacement_status().unwrap_or_else(|e| json!({"error":format!("{e:#}")})), "awaitingAcknowledgement":pending,"conflicts":conflicts,"recovery":recovery,"retained":retained}),
-        )
+        let replacement_status = folder
+            .replacement_status()
+            .unwrap_or_else(|e| json!({"error":format!("{e:#}")}));
+        Ok(json!({
+            "root": root,
+            "remote": setting(&db, "url")?,
+            "contact": setting(&db, "contact")?,
+            "phase": state,
+            "error": error,
+            "pendingPaths": count,
+            "awaitingAcknowledgement": pending,
+            "conflicts": conflicts,
+            "recovery": recovery,
+            "retained": retained,
+            "replacementStatus": replacement_status,
+            "previousVersions": previous_versions
+        }))
     }
 }
 
-fn check_history(base: &Baseline, items: &BTreeMap<String, Item>) -> Result<()> {
-    for (path, (rev, sha)) in base {
+fn check_history(
+    base: &Baseline,
+    conflicts: &BTreeMap<String, Conflict>,
+    items: &BTreeMap<String, Item>,
+) -> Result<()> {
+    let verify = |path: &str, revision: i64, sha: &str| -> Result<()> {
         ensure!(
-            items
-                .get(path)
-                .is_some_and(|i| i.revision > *rev || (i.revision == *rev && i.sha256 == *sha)),
+            items.get(path).is_some_and(
+                |i| i.revision > revision || (i.revision == revision && i.sha256 == sha)
+            ),
             "{path}: host history missing or rolled back; check persistent host storage"
         );
+        Ok(())
+    };
+    for (path, (revision, sha)) in base {
+        verify(path, *revision, sha)?;
+    }
+    // A conflict is a newer durable observation even though the two sides have not converged.
+    // Python and Rust both use the verified payload digest as the last part of the copy name.
+    for (path, conflict) in conflicts {
+        let (_, sha) = conflict
+            .remote
+            .rsplit_once('-')
+            .context("invalid remote conflict copy name")?;
+        ensure!(
+            sha.len() == 64 && sha.bytes().all(|c| c.is_ascii_hexdigit()),
+            "invalid remote conflict digest"
+        );
+        verify(path, conflict.revision, sha)?;
     }
     Ok(())
 }

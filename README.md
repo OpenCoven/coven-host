@@ -23,6 +23,8 @@ Edit `Castles/demo/files/` or `Castles/demo/results/` with any editor. Run `cove
 
 If both sides edited the same file, inspect both paths reported by `status`. Choose `coven host resolve files/note.md --local`, `--remote` or `--merged /path/to/merged.md`, then sync again. A raced or interrupted replacement can also leave private staging files or displaced bytes. Inspect the paths and, on Windows, the recorded destination, staging and backup observations before moving retained copies to a private backup and retrying.
 
+The native client keeps the displaced file itself after an update. An editor that still has that file open can finish saving to it. Offline status lists these files under `previousVersions`, with the Castle path in each location. Each private archive reserves up to 100 MiB or 1000 previous versions. If it fills, finish saving and close editors, then move older versions you want to keep to a private backup before syncing again.
+
 Stop the Python client and peer before switching an existing installation. Use the existing host storage for `serve`. The default Linux daemon discovers the Python client database at `~/.local/state/coven-host/client`. For a custom Python state directory, set `COVEN_HOST_STATE` to its absolute path in the environment that starts the daemon. The existing root, identity pin, outbox and conflict copies are read in place. `put`, `get` and `demo-result` accept `--url` and `--token-file` and communicate directly with the peer.
 
 ## Python reference walkthrough

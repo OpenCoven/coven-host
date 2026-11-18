@@ -160,6 +160,32 @@ impl Dir {
         Ok(self.file.sync_all()?)
     }
 
+    pub fn open_lock(&self, name: &OsStr) -> Result<File> {
+        let file = File::from(
+            at::openat(
+                &self.file,
+                name,
+                OFlags::RDWR
+                    | OFlags::CLOEXEC
+                    | OFlags::CREATE
+                    | OFlags::NOFOLLOW
+                    | OFlags::NONBLOCK,
+                Mode::RUSR | Mode::WUSR,
+            )
+            .map_err(std_error)?,
+        );
+        fingerprint(&file)?;
+        self.check_name(&file, name)?;
+        Ok(file)
+    }
+
+    pub fn move_new(&self, source: &str, dest: &Dir, name: &str) -> Result<()> {
+        at::renameat_with(&self.file, source, &dest.file, name, RenameFlags::NOREPLACE)
+            .map_err(std_error)?;
+        dest.sync()?;
+        self.sync()
+    }
+
     pub fn remove(&self, name: &str) -> Result<()> {
         at::unlinkat(&self.file, name, AtFlags::empty()).map_err(std_error)?;
         self.sync()
@@ -222,6 +248,11 @@ pub(super) fn install(
         scratch.remove(stage)?;
         return Err(e);
     }
+    let previous = expected
+        .map(|hash| {
+            super::previous::PreviousVersion::reserve(parent, name, scratch, stage, path, hash)
+        })
+        .transpose()?;
     let flags = if expected.is_some() {
         RenameFlags::EXCHANGE
     } else {
@@ -243,7 +274,7 @@ pub(super) fn install(
             scratch.path.display()
         )
     })?;
-    if let Some(expected) = expected {
+    if let (Some(expected), Some(previous)) = (expected, previous) {
         let recovery = scratch.path.join(stage);
         let displaced = missing_or(read_at(scratch, stage.as_ref(), MAX_FILE, false))
             .with_context(|| format!("{path}: inspect {}", recovery.display()))?;
@@ -252,7 +283,7 @@ pub(super) fn install(
             "{path}: an edit raced replacement; recover it from {}",
             recovery.display()
         );
-        scratch.remove(stage)?;
+        previous.promote(scratch, stage)?;
     }
     Ok(())
 }
