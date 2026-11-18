@@ -1,0 +1,17 @@
+title = "Coven Host secret scanning"
+
+[extend]
+useDefault = true
+
+# token_from accepts a single URL-safe token in a protected file.
+[[rules]]
+id = "coven-host-token-file"
+description = "Standalone value matching the Coven Host token format"
+regex = '''(?m)^[ \t]*([A-Za-z0-9_-]{43,128})[ \t]*\r?$'''
+secretGroup = 1
+
+[[rules]]
+id = "coven-host-bearer"
+description = "Literal Coven Host bearer credential"
+regex = '''(?i)\bbearer[ \t]+([A-Za-z0-9_-]{43,128})(?:$|[^A-Za-z0-9_-])'''
+secretGroup = 1
