@@ -8,6 +8,7 @@ The Rust library in this repository implements file transfer, reconciliation and
 | --- | --- |
 | Connect a folder, run the peer or recover a file | [Native operator guide](docs/operations.md) |
 | Find the next task, its owner and its completion condition | [MVP delivery plan](docs/plan.md) |
+| Enable the commit guard | [Contributor setup](AGENTS.md#enable-the-commit-guard) |
 | Find source, tests and related work before editing | [Agent and contributor guide](AGENTS.md) |
 | Check which binaries, platforms and behaviors passed | [Acceptance report and verification commands](docs/acceptance.md) |
 

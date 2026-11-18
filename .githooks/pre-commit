@@ -1,0 +1,19 @@
+#!/bin/sh
+set -eu
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo "Commit blocked. Install Gitleaks 8.30.1 or compatible v8 and retry." >&2
+    exit 1
+fi
+
+# Private token files and binary keystores can lack scannable text.
+if ! git diff --cached --quiet --no-renames --diff-filter=ACMT -- \
+    ':(icase,glob)**/access/token' ':(icase,glob)**/*.p12' ':(icase,glob)**/*.pfx' \
+    ':(icase,glob)**/.env' ':(icase,glob)**/.env.local' ':(icase,glob)**/.env.*.local' \
+    ':(icase,glob)**/host.sqlite' ':(icase,glob)**/host.sqlite-*' \
+    ':(icase,glob)**/client.sqlite' ':(icase,glob)**/client.sqlite-*'; then
+    echo "Commit blocked. Check staged paths for a credential file, keystore or private sync database." >&2
+    exit 1
+fi
+
+exec gitleaks git --pre-commit --staged --config .gitleaks.toml --ignore-gitleaks-allow --redact=100 --no-banner

@@ -4,6 +4,17 @@ Start with the [delivery plan](docs/plan.md) for current work and its next owner
 
 The product is Rust. The Linux compatibility tests extract the historical Python prototype at a fixed commit into a temporary directory. Keep product changes in Rust and use that fixture to verify interoperability and upgrades.
 
+## Enable the commit guard
+
+Install Gitleaks 8.30.1 or a compatible v8 release and run the following once per clone. Git shares this configuration with linked worktrees. If the clone already uses a custom hooks directory, call this repository’s `.githooks/pre-commit` from the existing pre-commit hook to preserve its other hooks.
+
+```sh
+gitleaks version
+git config --local core.hooksPath .githooks
+```
+
+Git runs the guard against the staged changes on commit. It uses Gitleaks’ default rules plus checks for Coven Host tokens, local environment files, binary keystores and sync databases. A missing scanner or a finding blocks the commit. To check the index manually, run `git hook run pre-commit`. After changing the guard, run `./tests/pre-commit.sh` to exercise blocked and allowed commits in a disposable repository. If it flags a credential, remove it from the index and keep it in protected storage. If it was already shared, revoke or rotate it before cleaning up the published copy.
+
 ## Find and claim work
 
 1. Check [open issues](https://github.com/OpenCoven/coven-host/issues?q=is%3Aissue%20is%3Aopen) and [open pull requests](https://github.com/OpenCoven/coven-host/pulls) for an existing owner, overlapping paths, dependencies and the last handoff. For cross-repository changes, check [Coven’s integration issue](https://github.com/OpenCoven/coven/issues/1805) as well.
