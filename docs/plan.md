@@ -11,6 +11,7 @@ The MVP connects one ordinary folder and one authenticated peer. Its acceptance 
 | Native CLI, daemon and package integration | Coven | Packaged for the private Host release | Daemon owns the root, token reference and polling worker. Same-user IPC advertises `hostSync` and exposes typed host operations. [Integration issue](https://github.com/OpenCoven/coven/issues/1805) |
 | Installed CLI and two-machine qualification | Host and Coven contributors | Passed for the pinned pair | See [tested revisions, environments and limits](acceptance.md). |
 | Library review and merge | Coven Host maintainer | Tracked in PR #1 | [Host PR #1](https://github.com/OpenCoven/coven-host/pull/1) records the review history and merge commit on `main`. |
+| Desktop installation | Coven Host | v0.1.1 desktop installers and offline kit | Qualify first launch, repeat setup, login synchronization and copyable diagnostics on each platform. [Desktop installation](setup.md) |
 | Consumer review and distribution | Coven maintainer | Private Host installation available, upstream Coven review pending | See the [Host release installation](install.md). Submit the integration for [Coven #1805](https://github.com/OpenCoven/coven/issues/1805) when authorized, verify the dependency resolves from a clean checkout, then follow Coven’s review and release process. |
 
 ## Next handoff

@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="asset-location" content="release">
+  <meta name="referrer" content="no-referrer">
+  <title>Install Coven Host</title>
+  <style>
+    :root { color-scheme: light dark; font: 17px/1.5 system-ui, sans-serif; background: #f3f5f2; color: #1a302a; }
+    * { box-sizing: border-box; }
+    body { max-width: 46rem; padding: clamp(1rem, 5vw, 3.25rem); margin: auto; }
+    main, details { background: white; border: 1px solid #c6d2cb; border-radius: 1rem; padding: clamp(1rem, 4vw, 2rem); margin: 1rem 0; }
+    h1 { font-size: clamp(1.9rem, 6vw, 3rem); line-height: 1.1; margin: 0 0 1rem; letter-spacing: -.035em; }
+    p { margin: .7rem 0 1rem; }
+    h2 { font-size: 1.2rem; margin: 1.5rem 0 .5rem; }
+    label, summary { font-weight: 650; } summary { cursor: pointer; }
+    a { color: #145a45; } .primary, button { display: inline-block; padding: .7rem 1rem; margin: .25rem .25rem .25rem 0; font: inherit; font-weight: 600; border-radius: .55rem; cursor: pointer; }
+    .primary { color: white; background: #1b5c47; text-decoration: none; }
+    button, select, textarea { color: inherit; background: transparent; border: 1px solid #879c90; }
+    select { display: block; width: 100%; font: inherit; padding: .65rem; margin: .4rem 0 .8rem; border-radius: .5rem; }
+    textarea { width: 100%; min-height: 15rem; padding: .75rem; font: .85rem/1.45 ui-monospace, monospace; }
+    [hidden] { display: none !important; }
+    :focus-visible { outline: 3px solid #3785c6; outline-offset: 3px; }
+    @media (prefers-color-scheme: dark) { :root { background: #15221e; color: #e4ede8; } main, details, select { background: #21332b; } a { color: #9adcb8; } .primary { background: #a1dec1; color: #172e24; } }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Install Coven Host</h1>
+    <p>Set up an ordinary Coven folder that syncs with a private peer on this computer. Download the installer for the computer where you want to keep the folder.</p>
+    <label for="device">Your computer</label>
+    <select id="device">
+      <option value="">Choose your platform</option>
+      <option value="mac">macOS</option>
+      <option value="win">Windows x64 or Windows 11 with x64 emulation</option>
+      <option value="deb64">Ubuntu or Debian · Intel/AMD 64-bit</option>
+      <option value="debarm">Ubuntu or Debian · ARM64</option>
+      <option value="linux64">Other Linux with glibc · Intel/AMD 64-bit</option>
+      <option value="linuxarm">Other Linux with glibc · ARM64</option>
+      <option value="other">Other device or unsure</option>
+    </select>
+    <p id="instruction" aria-live="polite">Use this page on your desktop or choose a platform above.</p>
+    <a class="primary" id="download" hidden>Download installer</a>
+    <a id="fallback" hidden>Use the portable download</a>
+    <p id="access">Downloads require access to the private OpenCoven repository. Once downloaded, the installers work offline.</p>
+    <noscript>
+      <p>JavaScript is turned off. Choose an installer directly.</p>
+      <ul>
+        <li><a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-macOS.zip">macOS</a></li>
+        <li><a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-Windows-x64.exe">Windows</a></li>
+        <li>Linux x86-64: <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-amd64.deb">Debian package</a> or <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-x86_64.tar.gz">portable archive</a></li>
+        <li>Linux ARM64: <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-arm64.deb">Debian package</a> or <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-aarch64.tar.gz">portable archive</a></li>
+      </ul>
+    </noscript>
+  </main>
+  <details id="help">
+    <summary>Trouble downloading or opening the installer?</summary>
+    <p>If the installer opened, use its diagnostics for details from the computer. If it could not open, choose what you saw below.</p>
+    <label for="symptom">What happened?</label>
+    <select id="symptom">
+      <option value="download">Download missing, sign-in required or page unavailable</option>
+      <option value="policy">The operating system or administrator blocked the installer</option>
+      <option value="format">The computer could not open this file type</option>
+      <option value="launch">I opened the installer and nothing appeared</option>
+      <option value="runtime">The folder stopped syncing after installation</option>
+    </select>
+    <p id="remedy"></p>
+    <label for="report">Support report</label>
+    <p>The report contains the selected symptom and platform. You can review it before sharing.</p>
+    <textarea id="report" readonly spellcheck="false"></textarea>
+    <button type="button" id="copy">Copy diagnostics</button>
+    <button type="button" id="save">Save report</button>
+    <p id="notice" role="status"></p>
+  </details>
+  <p><a href="https://github.com/OpenCoven/coven-host/releases/tag/v0.1.1">All downloads and checksums</a> · <a href="https://github.com/OpenCoven/coven-host/blob/v0.1.1/docs/setup.md">Installation help</a></p>
+  <script>
+    'use strict';
+    const release = '0.1.1';
+    const offline = document.querySelector('meta[name="asset-location"]').content === 'offline';
+    const base = offline ? './' : 'https://github.com/OpenCoven/coven-host/releases/download/v' + release + '/';
+    const packages = {
+      mac: ['Coven-Host-0.1.1-macOS.zip', 'Open the downloaded archive, then open Coven Host.'],
+      win: ['Coven-Host-0.1.1-Windows-x64.exe', 'Open the downloaded setup program in your Windows account.'],
+      deb64: ['Coven-Host-0.1.1-linux-amd64.deb', 'Open the package in Software Install. After installation, open Coven Host from Applications.'],
+      debarm: ['Coven-Host-0.1.1-linux-arm64.deb', 'Open the package in Software Install. After installation, open Coven Host from Applications.'],
+      linux64: ['Coven-Host-0.1.1-linux-x86_64.tar.gz', 'Extract the archive and open Install Coven Host.'],
+      linuxarm: ['Coven-Host-0.1.1-linux-aarch64.tar.gz', 'Extract the archive and open Install Coven Host.']
+    };
+    const symptoms = {
+      download: ['DOWNLOAD_ACCESS', 'download', 'GitHub offers the selected asset', 'Asset unavailable in the browser', 'Sign in to GitHub with an account that can open the private OpenCoven/coven-host repository. Then retry the download.'],
+      policy: ['OS_POLICY', 'open', 'OS permits the approved installer', 'Operating system or administrator blocked launch', 'Check the publisher and checksum on the release page. On a managed device, ask your administrator to approve the installer.'],
+      format: ['PACKAGE_FORMAT', 'open', 'System recognizes the package and supports its architecture', 'No compatible opener or architecture', 'Check your device architecture in system settings. On Linux, try the portable archive for your architecture.'],
+      launch: ['NO_WINDOW', 'launch', 'The setup window or Coven directory opens', 'No window observed after launch', 'Check Downloads for an archive that needs extracting. Reopen the extracted installer. If it still fails, share this report and the exact operating system error with support.'],
+      runtime: ['SYNC_STATUS', 'runtime', 'Peer and client converge in the Coven directory', 'User reports sync stopped', 'Reopen Coven Host for current status and diagnostics. Keep both versions if it reports a conflict.']
+    };
+    const byId = id => document.getElementById(id);
+    const device = byId('device');
+    if (offline) {
+      byId('access').textContent = 'These installers are included in the extracted folder. If your browser saves another copy, open the file from your downloads.';
+      byId('download').textContent = 'Open installer file';
+    }
+    function update() {
+      const selected = device.value;
+      const pkg = packages[selected];
+      const link = byId('download');
+      link.hidden = !pkg;
+      if (pkg) link.href = base + pkg[0]; else link.removeAttribute('href');
+      byId('instruction').textContent = pkg ? pkg[1] : 'Use a supported desktop or choose your platform. On phones, tablets or managed devices, open the installation help for available options.';
+      const alternate = byId('fallback');
+      alternate.hidden = !['deb64', 'debarm'].includes(selected);
+      if (!alternate.hidden) alternate.href = base + packages[selected === 'deb64' ? 'linux64' : 'linuxarm'][0];
+      const [code, stage, expected, observed, next] = symptoms[byId('symptom').value];
+      byId('remedy').textContent = next;
+      byId('report').value = JSON.stringify({
+        schema: 1, product: 'Coven Host', release, timestampUTC: new Date().toISOString(),
+        source: 'Download guide (user-selected symptom)', distribution: offline ? 'offline kit' : 'GitHub release', code, stage,
+        platform: device.selectedOptions[0].text, asset: pkg ? pkg[0] : null,
+        expected, observed, reproduction: 'Choose the reported platform and open its release download.',
+        nextAction: next
+      }, null, 2);
+      byId('notice').textContent = '';
+    }
+    const ua = navigator.userAgent;
+    if (!/Android|iPad|iPhone/i.test(ua) && !(navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)) {
+      if (/Macintosh|Mac OS X/.test(ua)) device.value = 'mac';
+      else if (/Windows/.test(ua) && /Win64|x64|ARM64/i.test(ua)) device.value = 'win';
+      else if (/Linux/.test(ua) && /x86_64|aarch64/.test(ua)) device.value = /aarch64/.test(ua) ? 'linuxarm' : 'linux64';
+    }
+    device.addEventListener('change', update);
+    byId('symptom').addEventListener('change', update);
+    byId('copy').addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(byId('report').value);
+        byId('notice').textContent = 'Report copied.';
+      } catch {
+        byId('report').focus(); byId('report').select();
+        byId('notice').textContent = 'Report selected. Use your system Copy command or Save report.';
+      }
+    });
+    byId('save').addEventListener('click', () => {
+      const url = URL.createObjectURL(new Blob([byId('report').value], { type: 'text/plain' }));
+      const a = document.createElement('a'); a.href = url; a.download = 'coven-host-diagnostics.txt';
+      a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+    });
+    update();
+  </script>
+</body>
+</html>
