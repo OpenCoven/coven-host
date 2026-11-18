@@ -1,0 +1,9 @@
+Coven Host for Linux
+
+Extract the entire archive. Open “Install Coven Host” inside the extracted folder. From a terminal in that folder, run ./'Install Coven Host'. Use your regular Linux account. On a desktop, the installer opens your Coven folder and adds Coven Host to the applications menu. On a server, the folder is available in your home directory. The extracted copy can then be moved or removed.
+
+Save documents in Coven/Castles/demo/files. Peer results appear in Coven/Castles/demo/results. The included peer runs on this computer. No account or network setup is required.
+
+You need Linux with glibc, Python 3.8 or later and a compatible CPU. A systemd user service resumes with your next login. For unattended service after logout, your administrator can enable user lingering. On systems without a systemd user manager, a desktop login starts the included supervisor. On a headless system without a user manager, run the installer again after restart or start it with --foreground from your service manager. A desktop file manager is required for the graphical folder-opening step.
+
+If setup needs attention, the launcher shows a copyable report and writes it to ~/.local/state/coven-host-support/last-error.txt when possible. Open the same installer again after following the report's next step. Use Show diagnostics from the application’s menu actions or add --diagnostics in a terminal to check the connection.

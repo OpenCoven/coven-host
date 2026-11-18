@@ -18,6 +18,34 @@ On 2026-11-18, the native CLI and production daemon passed packaged acceptance o
 
 Windows library tests also interrupted the process immediately after replacement and after backup promotion, then inspected the destination, staging file and backup. The locked Coven workspace suite recorded 5,908 passed, zero failed and 34 ignored.
 
+## Desktop installers
+
+The v0.1.1 installers configure the native CLI, a private peer and a folder watcher. Every supported installer completed a fresh setup, an automatic upload and download, and a repeat setup with the original credentials. The [installation guide](setup.md) lists the download for each system.
+
+| System exercised | Observed installation behavior |
+| --- | --- |
+| Apple silicon Mac, macOS 27.2.1 | Setup installed a durable app under the current account. After the original download was removed, reopening that app preserved the login services and credentials. The earlier v0.1.0 profile retained its peer data. A pre-existing folder and an unrelated app with the same name survived the diagnostic path. The Intel executable and installer logic ran under Rosetta. Physical Intel hardware was outside this run. |
+| Windows 11 ARM64 build 26300, NTFS, x64 emulation | The installer opened the folder in Explorer and restricted token access to the owner. After a reboot and sign-in, the watcher resumed and uploaded the exact contents of an offline edit. Copy and Save produced the same diagnostic report. The release EXE is unsigned. |
+| Ubuntu 24.04, x86-64 and ARM64 | Debian packages and portable archives transferred bytes in both directions. The x86-64 desktop run exercised graphical package installation, folder opening, clipboard diagnostics and recovery from conflicting edits under Xvfb. The x86-64 fallback run exercised operation without a systemd user manager. |
+
+The platform chooser passed browser checks for supported and unsupported systems, clipboard denial, report saving and a narrow viewport. With networking disabled, the extracted offline kit resolved every installer and its checksum file with JavaScript enabled and disabled. A missing-file report directed the user to re-extract the kit.
+
+Apple accepted the signed macOS app. After stapling the ticket, the release maintainer extracted the final archive and verified its code signature for both architectures. Gatekeeper accepted it as Notarized Developer ID from Soul Protocol LLC. The shipping app uses the signed-in account. The private test profile is confined to the separate verifier. [Apple submission run](https://github.com/OpenCoven/chat/actions/runs/44323270011)
+
+### Verify a release download
+
+The annotated release tag signs the SHA-256 digest of the release asset named `SHA256SUMS`. Use the verified tag in the private repository as the reference. Compare the digest printed for the manifest with the value in the signed tag message, then compare the selected installer with its entry in that manifest. The checksum file inside the offline ZIP covers the files in the extracted kit.
+
+With the Windows installer and the release manifest in Downloads, open PowerShell in that directory and run the following commands. The final two lines should show the same installer digest, ignoring letter case.
+
+```powershell
+Get-FileHash .\SHA256SUMS -Algorithm SHA256
+Get-FileHash .\Coven-Host-0.1.1-Windows-x64.exe -Algorithm SHA256
+Select-String -Path .\SHA256SUMS -Pattern '  Coven-Host-0\.1\.1-Windows-x64\.exe$'
+```
+
+On macOS, run `shasum -a 256 SHA256SUMS` to check the manifest itself. After extracting the offline kit, run `shasum -a 256 -c SHA256SUMS` from the extracted folder. On Linux, use `sha256sum` in place of `shasum -a 256`.
+
 ## SSH walkthrough
 
 The macOS client opened a strict host-key-checked SSH forward to a Linux guest. With the tunnel down, a local edit survived a daemon restart. The peer restarted on its original database and retained its identity and revision 1. After reconnect, the offline edit became revision 2. Conflicting edits produced two recoverable versions. Explicit local resolution left both endpoints at revision 4 with SHA-256 `6089e19ae7647e2b425a5648590d62b37dc92d8b8cb957bb0e68dde52e552903`.
@@ -39,7 +67,7 @@ cargo test --locked --all-targets
 cargo build --locked --example compat_client
 ```
 
-On Linux with Python 3.11+ and a filesystem supporting atomic exchange, run the three interoperability combinations and the in-place upgrade. The script extracts the historical reference from Git into a temporary directory and removes it on exit. A shallow checkout must fetch the fixture commit named by the script first. Python is needed only for this test suite.
+On Linux with Python 3.11+ and a filesystem supporting atomic exchange, run the three interoperability combinations and the in-place upgrade. The script extracts the historical reference from Git into a temporary directory and removes it on exit. A shallow checkout must fetch the fixture commit named by the script first. The sync engine and peer run natively in Rust. The Linux desktop setup launcher also uses Python.
 
 ```sh
 ./tests/compat-linux.sh

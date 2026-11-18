@@ -1,4 +1,6 @@
-# Install Coven Host v0.1.0
+# Advanced installation from CLI packages
+
+For the desktop installer and automatic local folder setup, use the [installer guide](setup.md). The instructions below apply to the v0.1.0 CLI packages.
 
 Download the CLI wrapper, the native package for your machine, and `SHA256SUMS` from the [Coven Host release](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.0). Access to the private repository is required. The packages install offline with npm and Node.js 18 or later. The release uses package version `0.1.0-host.1` to distinguish it from the public Coven CLI.
 
