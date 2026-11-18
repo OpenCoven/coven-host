@@ -205,3 +205,37 @@ requires the host ID, quoted expected revision (`"0"` for creation), content
 length, SHA-256 and bearer authorization. The shipped `get`, `put` and
 `demo-result` commands use this interface. The API does not authorize or run
 missions, execute documents, manage provider sandboxes or schedule work.
+
+## Observed acceptance results
+
+Tested implementation: `9bcd2c8d79a165c4a603eeebd2eb8da3b45e6304`.
+Environment: Ubuntu 24.04.5, Linux x86_64, Python 3.12.3, SQLite 3.45.1.
+The tests launched the client and host as separate processes over IPv4
+loopback, with disposable roots and independent persistent state directories.
+
+| Scenario | Observed result |
+| --- | --- |
+| Local create/update | **Pass.** Binary content, inventory SHA-256, byte length and revisions matched across upload and update. |
+| Remote create/update | **Pass.** Nested binary artifact hashes matched both times. The demo result arrived with `Castle: demo` and a labeled demo message. |
+| Offline editing and restart | **Pass.** `status` reported offline with one pending path; local bytes remained readable. The host retained the original version after being killed and restarted. A fresh foreground client uploaded the offline edit as revision 2. |
+| Concurrent edits | **Pass.** Both versions were recoverable; repeated sync did not duplicate them. Local, remote and merged resolutions each converged, with recovery copies retained. |
+| Lost acknowledgement and interrupted download | **Pass.** A loopback proxy dropped a committed PUT response, then truncated a download. The upload receipt survived a host restart and intervening host update; retry neither duplicated the upload nor created a false conflict. The truncated download left the old file untouched. |
+| Authentication and root boundaries | **Pass.** Missing and wrong tokens were rejected on listing, read and write. Traversal, path aliases, wrong Castle and symlink targets were rejected. A simulated edit at atomic exchange was retained and reported. |
+| Exclusions and limits | **Pass.** Excluded contents stayed local; both sides rejected over-limit files. An 11th 10 MiB file was refused after 100 MiB without being committed. |
+| Deletion and unavailable root | **Pass.** Rename created a new remote file and reported the unresolved deletion. Missing root reported unknown pending work without changing remote bytes. A rolled-back host DB did not replace newer local bytes. |
+
+Commands: `python3 -m compileall -q coven_host tests`,
+`python3 -m unittest discover -s tests -v` (10 passed), `git diff --check`,
+and the disposable Bash walkthrough above. In the walkthrough, local and
+host reads both yielded SHA-256
+`3609839b83599c2fd78fab31d3f4c1214ce3cbc77aa65d9de69e392db486af78`.
+After resolving the deliberate conflict, the host contained `local edit` and
+status reported `synced`, zero pending paths and zero conflicts. CodeQL
+reported zero Python alerts.
+
+**Remaining acceptance:** no authorized remote machine was configured, so
+the SSH deployment on a second machine and the HTTPS reverse-proxy option
+are unverified. Run the deployment steps above on an authorized Linux host
+and repeat the walkthrough through the verified SSH tunnel, including
+stopping and reconnecting the tunnel. Other platforms and graphical file
+browsers were not exercised.
