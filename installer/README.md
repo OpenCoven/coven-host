@@ -21,3 +21,5 @@ python3 installer/linux/build.py --arch arm64 --native "$ARM64_CLI" --sha256 1cc
 ## Offline kit
 
 Put the qualified macOS ZIP, Windows EXE, two Linux desktop packages and two Linux portable archives in the output directory. With Python 3.11 or later, run `python3 installer/package-offline.py "$OUTPUT"`. The kit includes a local copy of the download guide, relative links to those assets and an internal checksum manifest. Upload the original guide separately for people who prefer downloading a single installer. Compare the published asset bytes with the signed release manifest before announcing distribution.
+
+The packager reads each installer once and calculates its checksum from the bytes written to the ZIP. Fixed ZIP timestamps and permissions make repeat builds from identical inputs byte-for-byte reproducible. Each build uses its own temporary directory and replaces the output only after the ZIP closes successfully. Run `python3 tests/test_offline_kit.py` to check reproducibility, input replacement, overlapping builds and recovery from a failed read.

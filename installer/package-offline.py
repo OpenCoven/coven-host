@@ -1,8 +1,10 @@
 """Bundle the qualified desktop installers with a local copy of the download guide."""
 import argparse
 import hashlib
+import os
 from pathlib import Path
-from zipfile import ZIP_STORED, ZipFile
+from tempfile import TemporaryDirectory
+from zipfile import ZipFile, ZipInfo
 
 VERSION = "0.1.1"
 PREFIX = f"Coven-Host-{VERSION}-"
@@ -12,6 +14,14 @@ INSTALLERS = [
         "linux-x86_64.tar.gz", "linux-aarch64.tar.gz",
     )
 ]
+
+
+def zip_entry(name: str) -> ZipInfo:
+    # Use the ZIP epoch and portable file permissions regardless of the build host.
+    entry = ZipInfo(name)
+    entry.create_system = 3  # Unix
+    entry.external_attr = 0o100644 << 16
+    return entry
 
 
 def bundle(assets: Path, guide: Path) -> None:
@@ -30,21 +40,23 @@ def bundle(assets: Path, guide: Path) -> None:
         )
     offline = local_guide.encode("utf-8")
     zip_name = PREFIX + "Offline.zip"
-    temp = assets / (zip_name + ".part")
     sums = [f"{hashlib.sha256(offline).hexdigest()}  Start-Here.html"]
-    try:
-        with ZipFile(temp, "w", compression=ZIP_STORED) as archive:
-            archive.writestr("Start-Here.html", offline)
+    with TemporaryDirectory(dir=assets, prefix=".offline-kit-") as staging:
+        temp = Path(staging) / zip_name
+        with ZipFile(temp, "w") as archive:
+            archive.writestr(zip_entry("Start-Here.html"), offline)
             for name in INSTALLERS:
-                path = assets / name
-                with path.open("rb") as file:
-                    digest = hashlib.file_digest(file, "sha256").hexdigest()
-                sums.append(f"{digest}  {name}")
-                archive.write(path, name)
-            archive.writestr("SHA256SUMS", "\n".join(sums) + "\n")
+                digest = hashlib.sha256()
+                with (assets / name).open("rb") as source:
+                    entry = zip_entry(name)
+                    entry.file_size = os.fstat(source.fileno()).st_size
+                    with archive.open(entry, "w") as member:
+                        while chunk := source.read(1024 * 1024):
+                            member.write(chunk)
+                            digest.update(chunk)
+                sums.append(f"{digest.hexdigest()}  {name}")
+            archive.writestr(zip_entry("SHA256SUMS"), "\n".join(sums) + "\n")
         temp.replace(assets / zip_name)
-    finally:
-        temp.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":
