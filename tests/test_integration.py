@@ -3,6 +3,7 @@ from hashlib import sha256
 import http.client
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
+import os
 from pathlib import Path
 import secrets
 import shutil
@@ -20,6 +21,11 @@ from coven_host.host import PREFIX
 
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+def executable(variable):
+    binary = os.environ.get(variable)
+    return [binary] if binary else [sys.executable, "-m", "coven_host"]
 
 
 class FaultProxy(BaseHTTPRequestHandler):
@@ -55,7 +61,7 @@ class Integration(unittest.TestCase):
     def setUp(self):
         work = tempfile.TemporaryDirectory()
         self.addCleanup(work.cleanup)
-        self.work = Path(work.name)
+        self.work = Path(work.name).resolve()
         self.token = self.work / "access"
         self.token.write_text(secrets.token_urlsafe(32) + "\n")
         self.token.chmod(0o600)
@@ -71,7 +77,7 @@ class Integration(unittest.TestCase):
         log_path = self.work / "server.log"
         with log_path.open("w") as log:
             self.host = subprocess.Popen(
-                [sys.executable, "-m", "coven_host", "serve", "--storage", str(self.work / "server"),
+                [*executable("COVEN_TEST_HOST"), "serve", "--storage", str(self.work / "server"),
                  "--token-file", str(self.token), "--port", str(self.port)],
                 cwd=REPO, stdout=log, stderr=subprocess.STDOUT,
             )
@@ -94,7 +100,7 @@ class Integration(unittest.TestCase):
 
     def run_cli(self, *args, code=0):
         result = subprocess.run(
-            [sys.executable, "-m", "coven_host", "--state", str(self.work / "client"),
+            [*executable("COVEN_TEST_CLIENT"), "--state", str(self.work / "client"),
              *map(str, args)], cwd=REPO, capture_output=True, timeout=15,
         )
         self.assertEqual(result.returncode, code, result.stdout + result.stderr)
@@ -186,7 +192,7 @@ class Integration(unittest.TestCase):
         self.assertEqual(path.read_bytes(), b"offline")
         self.start_host()
         self.assert_remote("files/note.md", b"before", 1)
-        with subprocess.Popen([sys.executable, "-m", "coven_host", "--state", str(self.work / "client"),
+        with subprocess.Popen([*executable("COVEN_TEST_CLIENT"), "--state", str(self.work / "client"),
                                "watch"], cwd=REPO, stdout=subprocess.PIPE) as watch:
             try:
                 for _ in range(100):
@@ -246,6 +252,7 @@ class Integration(unittest.TestCase):
         self.assertIn(b"Conflicts: 0", self.run_cli("status"))
         self.assertEqual(list((self.work / "client" / "recovery").iterdir()), [])
 
+    @unittest.skipIf(os.environ.get("COVEN_TEST_CLIENT"), "Rust replacement race runs in the native folder tests")
     def test_mid_replace_edit_is_retained_and_reported(self):
         path = self.castle / "files/note.md"
         path.write_bytes(b"before")

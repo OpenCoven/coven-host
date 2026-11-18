@@ -1,11 +1,31 @@
 # Coven Host
 
-Coven Host synchronizes an ordinary folder (`~/Coven` by default) with one
-authenticated host. Edit files with any file browser or editor. The foreground
-client checks both copies, preserves conflicts and retries after a disconnect.
-The host can publish files through the same revisioned API.
+Coven Host synchronizes an ordinary folder with one authenticated peer. The Rust library implements the peer protocol and client reconciliation used by the native `coven host` commands. The Python implementation below remains the Linux compatibility reference.
 
-## Setup and five-minute walkthrough
+## Sync a folder with the native CLI
+
+Use a Coven build with the `hostSync` capability. Start the peer on the Linux host with a protected token file and a private storage directory. The service binds to IPv4 loopback and runs independently of a desktop or daemon.
+
+```sh
+coven host serve --port 8765 --storage "$HOME/.local/state/coven-host/server" --token-file "$HOME/.local/state/coven-host/access/token"
+```
+
+On the client, open the verified SSH tunnel described below. The client and server token files must contain the same URL-safe token of 43–128 characters. Keep the client token outside the folder. On Unix, the token must be owned by the current user with mode 600 or stricter. On Windows, protect it with an owner-only ACL.
+
+```sh
+coven host init --root "$HOME/Coven"
+coven host connect http://127.0.0.1:18765 --token-file "$HOME/.local/state/coven-host/access/token"
+coven host sync
+coven host status
+```
+
+Edit `Castles/demo/files/` or `Castles/demo/results/` with any editor. Run `coven host sync` to wait for reconciliation, or `coven host watch` to follow the daemon’s polling loop until interrupted. Use `coven host status` offline to see pending paths, conflict copies and recovery locations. Deleting or renaming a synchronized file leaves the old remote copy available for resolution.
+
+If both sides edited the same file, inspect both paths reported by `status`. Choose `coven host resolve files/note.md --local`, `--remote` or `--merged /path/to/merged.md`, then sync again. A raced or interrupted replacement can also leave private staging files or displaced bytes. Inspect the paths and, on Windows, the recorded destination, staging and backup observations before moving retained copies to a private backup and retrying.
+
+Stop the Python client and peer before switching an existing installation. Use the existing host storage for `serve`. The default Linux daemon discovers the Python client database at `~/.local/state/coven-host/client`. For a custom Python state directory, set `COVEN_HOST_STATE` to its absolute path in the environment that starts the daemon. The existing root, identity pin, outbox and conflict copies are read in place. `put`, `get` and `demo-result` accept `--url` and `--token-file` and communicate directly with the peer.
+
+## Python reference walkthrough
 
 Use Linux with Python 3.11+ and a filesystem supporting atomic
 `renameat2(RENAME_EXCHANGE)` (tested on Ubuntu Linux with Python 3.12.3).
@@ -192,9 +212,9 @@ local `AGENTS.md` or Host implementation. `OpenCoven/coven` uses same-user
 local IPC for agent sessions; `OpenCoven/coven-castles` describes read-only
 sandbox preflight, not a document namespace or file authority. The linked
 `coven-agents` repository was not accessible from this environment, so no
-agent-service contract was assumed. This isolated prototype uses Python's
+agent-service contract was assumed. The original prototype uses Python's
 standard library for the CLI and loopback HTTP, and SQLite for transactional
-storage and restart recovery. It does not extend the main `coven` CLI.
+storage and restart recovery. The Rust integration above adds the host commands to the main CLI.
 
 The demo is not a live familiar or mission runner. A future authorized
 integration can read explicitly selected inputs from `files/` and publish
@@ -206,7 +226,7 @@ length, SHA-256 and bearer authorization. The shipped `get`, `put` and
 `demo-result` commands use this interface. The API does not authorize or run
 missions, execute documents, manage provider sandboxes or schedule work.
 
-## Observed acceptance results
+## Historical Python acceptance results
 
 Tested implementation: `9bcd2c8d79a165c4a603eeebd2eb8da3b45e6304`.
 Environment: Ubuntu 24.04.5, Linux x86_64, Python 3.12.3, SQLite 3.45.1.
@@ -233,9 +253,22 @@ After resolving the deliberate conflict, the host contained `local edit` and
 status reported `synced`, zero pending paths and zero conflicts. CodeQL
 reported zero Python alerts.
 
-**Remaining acceptance:** no authorized remote machine was configured, so
+**At the time of that Python run**, no authorized remote machine was configured, so
 the SSH deployment on a second machine and the HTTPS reverse-proxy option
 are unverified. Run the deployment steps above on an authorized Linux host
 and repeat the walkthrough through the verified SSH tunnel, including
 stopping and reconnecting the tunnel. Other platforms and graphical file
 browsers were not exercised.
+
+## Run the Rust compatibility checks
+
+```sh
+cargo test --locked --all-targets
+cargo build --locked --example compat_client
+NATIVE="$PWD/target/debug/examples/compat_client"
+COVEN_TEST_HOST="$NATIVE" python3 -m unittest discover -s tests -v
+COVEN_TEST_CLIENT="$NATIVE" python3 -m unittest discover -s tests -v
+COVEN_TEST_HOST="$NATIVE" COVEN_TEST_CLIENT="$NATIVE" COVEN_TEST_NATIVE="$NATIVE" python3 -m unittest discover -s tests -v
+```
+
+Run the mixed-language matrix on Linux. The upgrade test creates a Python client with a pending upload and an open conflict, stops the Python peer, and opens both databases in Rust. Platform-specific Rust tests exercise replacement and interruption through the native filesystem APIs.
