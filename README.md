@@ -6,6 +6,7 @@ The Rust library in this repository implements file transfer, reconciliation and
 
 | I want to… | Start here |
 | --- | --- |
+| Install the v0.1.0 release | [Download and installation](docs/install.md) |
 | Connect a folder, run the peer or recover a file | [Native operator guide](docs/operations.md) |
 | Find the next task, its owner and its completion condition | [MVP delivery plan](docs/plan.md) |
 | Enable the commit guard | [Contributor setup](AGENTS.md#enable-the-commit-guard) |

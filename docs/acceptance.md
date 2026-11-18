@@ -1,6 +1,6 @@
 # Native MVP acceptance
 
-On 2026-11-18, the native CLI and production daemon passed packaged acceptance on three filesystems. The packages were installed from locally built npm tarballs. Registry publication is a separate delivery step tracked in the [plan](plan.md).
+On 2026-11-18, the native CLI and production daemon passed packaged acceptance on three filesystems. The packages were installed from locally built npm tarballs. The [v0.1.0 private release](install.md) repackaged those same executables and repeated installed acceptance on all three platforms, including the SSH walkthrough. The [plan](plan.md) tracks upstream Coven distribution.
 
 | Component | Tested revision |
 | --- | --- |
