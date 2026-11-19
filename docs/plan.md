@@ -13,6 +13,7 @@ The MVP connects one ordinary folder and one authenticated peer. Its acceptance 
 | Library review and merge | Coven Host maintainer | Merged into main | [Host PR #1](https://github.com/OpenCoven/coven-host/pull/1) records the review history and merge commit on `main`. |
 | Desktop installation | Coven Host | [v0.1.1 published](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.1) | First launch, repeat setup, login synchronization, copyable diagnostics and offline installation passed. [Desktop qualification](acceptance.md#desktop-installers) |
 | Consumer review and distribution | Coven maintainer | Private Host installation available, upstream Coven review pending | See the [Host release installation](install.md). Submit the integration for [Coven #1805](https://github.com/OpenCoven/coven/issues/1805) when authorized, verify the dependency resolves from a clean checkout, then follow Coven’s review and release process. |
+| Agent readiness and CI | Coven Host | In review on 2026-11-19 | `scripts/check.sh` is the single check entrypoint, and CI runs it on Linux, macOS and Windows with a Linux compatibility job and a secret scan. Follow-up work is filed as claimable issues #5–#12. [Tracking issue #4](https://github.com/OpenCoven/coven-host/issues/4) |
 
 ## Next handoff
 
@@ -20,4 +21,4 @@ Host PR #1 is merged. The [v0.1.1 installer guide](setup.md) is the entry point 
 
 ## Scope for follow-up work
 
-This iteration covers creation, updates and explicit conflict resolution in the demo Castle. Missing files remain visible as unresolved work. Multi-client coordination, propagated deletion, additional Castles and execution of uploaded documents would change the operating contract and belong in separately scoped issues.
+This iteration covers creation, updates and explicit conflict resolution in the demo Castle. Missing files remain visible as unresolved work. Multi-client coordination, propagated deletion, additional Castles and execution of uploaded documents would change the operating contract and belong in separately scoped issues. Each of these items, and each untested platform in the acceptance report, has a claimable issue listed on [#4](https://github.com/OpenCoven/coven-host/issues/4).
