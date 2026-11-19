@@ -150,6 +150,33 @@ impl Folder {
         Ok(castle)
     }
 
+    pub(crate) fn verify_owner(&self, owner: &str) -> Result<()> {
+        let root = Dir::open(&self.root, false)?;
+        let recorded = read_at(&root, ".coven-profile".as_ref(), 128, false)
+            .context("Castle ownership is unverified; select the original configured profile and run coven host init with this root")?;
+        ensure!(
+            recorded == owner.as_bytes(),
+            "Castle belongs to a different daemon profile; use its original profile or initialize a separate folder"
+        );
+        Ok(())
+    }
+
+    pub(crate) fn claim_owner(&self, owner: &str, configured: bool) -> Result<()> {
+        let root = Dir::open(&self.root, true)?;
+        let lock = root.open_lock(".coven-profile.lock".as_ref())?;
+        fs2::FileExt::lock_exclusive(&lock)?;
+        if !configured
+            && self.castle(false).is_ok()
+            && root.open_file(".coven-profile".as_ref()).is_err()
+        {
+            anyhow::bail!(
+                "existing Castle has no recorded owner; select its original configured profile and run coven host init"
+            );
+        }
+        seed(&root, ".coven-profile", owner.as_bytes())?;
+        self.verify_owner(owner)
+    }
+
     pub fn initialize(&self) -> Result<()> {
         let castle = self.castle(true)?;
         for area in ["files", "results"] {
