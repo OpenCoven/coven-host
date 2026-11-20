@@ -18,6 +18,10 @@ The MVP connects one ordinary folder and one authenticated peer. Its acceptance 
 
 Host PR #1 is merged. The [v0.1.1 installer guide](setup.md) is the entry point for desktop users. The [v0.1.0 release](install.md) supplies the underlying native packages, wrapper and integration source. The Coven maintainer owns review of [Coven PR #1809](https://github.com/OpenCoven/coven/pull/1809) for [Coven #1805](https://github.com/OpenCoven/coven/issues/1805). Use the PR for its current library pin and checks, and the [acceptance report](acceptance.md) for the shipped Host packages. If either implementation changes, identify which compatibility, native package or SSH scenarios the change affects and rerun them. Record the release version when a distributable package is published.
 
+The maintainer’s next decision is whether to accept the profile ownership change in [Host PR #14](https://github.com/OpenCoven/coven-host/pull/14) and the integration in [Coven PR #1809](https://github.com/OpenCoven/coven/pull/1809). Coven pins Host `65927dd5`. The installed candidate was `350f186f` and the consumer review head `6caf1095` adds the dependency audit configuration. The candidate passed installed APFS, ext4, NTFS and SSH qualification. [Qualification handoff](https://github.com/OpenCoven/coven/issues/1805#issuecomment-7006154995)
+
+[Agent readiness #4](https://github.com/OpenCoven/coven-host/issues/4) tracks the shared contributor checks and backlog. Issues #9–#12 cover physical Intel, native x64 Windows, installer signing and physical-machine SSH qualification. The Project issuer decision D01 remains with Val and the design owners before [draft PR #16](https://github.com/OpenCoven/coven-host/pull/16) can proceed.
+
 ## Scope for follow-up work
 
 [Host #5](https://github.com/OpenCoven/coven-host/issues/5) adds deletion and rename reconciliation to the demo Castle. The Coven consumer pin and distributed packages still use the earlier behavior. Multi-client coordination, additional Castles and execution of uploaded documents have separate tracking issues.

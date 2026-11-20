@@ -79,6 +79,92 @@ fn offline_status_identifies_bytes_saved_through_a_displaced_open_file() {
 }
 
 #[test]
+fn profile_claims_serialize_and_survive_restart() {
+    use std::sync::Barrier;
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("castle");
+    let barrier = Barrier::new(2);
+    let candidates = [base.join("one"), base.join("two")];
+    let results = std::thread::scope(|scope| {
+        candidates
+            .each_ref()
+            .map(|home| {
+                let barrier = &barrier;
+                let root = &root;
+                scope.spawn(move || {
+                    let client = Client::for_profile(&home.join("state"), home);
+                    barrier.wait();
+                    client.initialize(root)
+                })
+            })
+            .map(|handle| handle.join().unwrap())
+    });
+    assert_eq!(
+        results.iter().filter(|r| r.is_ok()).count(),
+        1,
+        "{results:?}"
+    );
+    let winner = results.iter().position(Result::is_ok).unwrap();
+    let client =
+        |index: usize| Client::for_profile(&candidates[index].join("state"), &candidates[index]);
+    let path = root.join("Castles/demo/files/draft");
+    fs::write(&path, b"offline edit").unwrap();
+    assert!(
+        client(1 - winner)
+            .initialize(&root.join("."))
+            .unwrap_err()
+            .to_string()
+            .contains("different daemon profile")
+    );
+    client(winner).initialize(&root).unwrap();
+    assert_eq!(client(winner).status().unwrap()["pendingPaths"], 1);
+    assert_eq!(fs::read(path).unwrap(), b"offline edit");
+}
+
+#[test]
+fn legacy_profile_requires_explicit_selection_before_adoption() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("castle");
+    let state = base.join("original/state");
+    Client::new(&state).initialize(&root).unwrap();
+    let profile = Client::for_profile(&state, &base.join("original"));
+    assert!(
+        profile
+            .status()
+            .unwrap_err()
+            .to_string()
+            .contains("unverified")
+    );
+    let other = Client::for_profile(&base.join("other/state"), &base.join("other"));
+    assert!(other.initialize(&root).is_err());
+    profile.initialize(&root).unwrap();
+    let shared_state = Client::for_profile(&state, &base.join("other"));
+    assert!(shared_state.initialize(&root).is_err());
+    let db = rusqlite::Connection::open(state.join("client.sqlite")).unwrap();
+    db.execute_batch("DROP TABLE deleted_baseline; DROP TABLE pending_delete;")
+        .unwrap();
+    assert!(
+        shared_state
+            .status()
+            .unwrap_err()
+            .to_string()
+            .contains("different daemon profile")
+    );
+    let deletion_tables: i64 = db.query_row(
+        "SELECT COUNT(*) FROM sqlite_schema WHERE name IN ('deleted_baseline','pending_delete')",
+        [],
+        |row| row.get(0),
+    ).unwrap();
+    assert_eq!(
+        deletion_tables, 0,
+        "refused profile migrated the owner's state"
+    );
+    profile.status().unwrap();
+}
+
+#[test]
 fn offline_reopen_adds_deletion_tables_and_reports_outstanding_receipt() {
     let temp = tempfile::tempdir().unwrap();
     let base = temp.path().canonicalize().unwrap();

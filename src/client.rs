@@ -16,6 +16,7 @@ use crate::{MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
 mod reconcile;
 
 pub struct Client {
+    profile: Option<PathBuf>,
     state: PathBuf,
 }
 
@@ -105,8 +106,26 @@ fn separate(a: &Path, b: &Path) -> Result<()> {
 impl Client {
     pub fn new(state: &Path) -> Self {
         Self {
+            profile: None,
             state: state.to_owned(),
         }
+    }
+
+    pub fn for_profile(state: &Path, profile: &Path) -> Self {
+        Self {
+            state: state.into(),
+            profile: Some(profile.into()),
+        }
+    }
+
+    fn owner(&self) -> Result<Option<String>> {
+        self.profile
+            .as_ref()
+            .map(|profile| {
+                let paths = (identity_path(profile)?, identity_path(&self.state)?);
+                Ok(digest(&serde_json::to_vec(&paths)?))
+            })
+            .transpose()
     }
 
     fn open_lock(&self) -> Result<File> {
@@ -144,6 +163,7 @@ impl Client {
         let db = Connection::open_with_flags(&path, flags)?;
         db.pragma_update(None, "synchronous", "FULL")?;
         if !init {
+            self.root(&db)?;
             let tx = db.unchecked_transaction()?;
             tx.execute_batch(include_str!("client/deletion_schema.sql"))?;
             tx.commit()?;
@@ -154,6 +174,9 @@ impl Client {
     fn root(&self, db: &Connection) -> Result<PathBuf> {
         let root = PathBuf::from(setting(db, "root")?.context("client has no configured root")?);
         separate(&root, &self.state)?;
+        if let Some(owner) = self.owner()? {
+            Folder::new(&root, &self.state).verify_owner(&owner)?;
+        }
         Ok(root)
     }
 
@@ -163,14 +186,19 @@ impl Client {
         let mut db = self.db(true)?;
         let tx = db.transaction()?;
         tx.execute_batch(include_str!("client/schema.sql"))?;
-        tx.execute_batch(include_str!("client/deletion_schema.sql"))?;
-        if let Some(other) = setting(&tx, "root")? {
+        let configured = setting(&tx, "root")?;
+        if let Some(ref other) = configured {
             ensure!(
                 identity_path(Path::new(&other))? == identity_path(root)?,
                 "client state is already bound to another root"
             );
         }
-        Folder::new(root, &self.state).initialize()?;
+        let folder = Folder::new(root, &self.state);
+        if let Some(owner) = self.owner()? {
+            folder.claim_owner(&owner, configured.is_some())?;
+        }
+        tx.execute_batch(include_str!("client/deletion_schema.sql"))?;
+        folder.initialize()?;
         set(
             &tx,
             "root",
