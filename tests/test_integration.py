@@ -36,9 +36,9 @@ class FaultProxy(BaseHTTPRequestHandler):
             conn.request(self.command, self.path, body, dict(self.headers))
             with conn.getresponse() as response:
                 data = response.read()
-                if self.command == "PUT" and self.server.fault == "ack":
+                if (self.command, self.server.fault) in {("PUT", "ack"), ("DELETE", "delete-ack")}:
                     self.server.fault = None
-                    return  # The upstream response proves the PUT committed.
+                    return  # Drop the response after the upstream commit.
                 self.send_response(response.status)
                 self.send_header("Content-Length", str(len(data)))
                 if response.getheader("X-Revision"):
@@ -51,7 +51,7 @@ class FaultProxy(BaseHTTPRequestHandler):
         finally:
             conn.close()
 
-    do_GET = do_PUT = relay
+    do_GET = do_PUT = do_DELETE = relay
 
     def log_message(self, *_):
         pass
@@ -330,6 +330,110 @@ class Integration(unittest.TestCase):
         (self.castle / "results").symlink_to(self.work, target_is_directory=True)
         self.assertIn(b"root unavailable or unsafe", self.run_cli("sync", code=1))
 
+    @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
+    def test_offline_rename_after_peer_restart(self):
+        original = self.castle / "files/note.md"
+        renamed = original.with_name("renamed.md")
+        original.write_bytes(b"offline rename")
+        self.run_cli("sync")
+        self.stop_host()
+        original.rename(renamed)
+        self.start_host()
+        self.run_cli("sync")
+        self.assert_remote("files/renamed.md", b"offline rename", 1)
+        self.assertEqual(self.request("GET", PREFIX + "/files/note.md")[0], 404)
+        self.assertFalse(original.exists())
+        self.assertEqual(renamed.read_bytes(), b"offline rename")
+
+    @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
+    def test_peer_rename_retains_displaced_local_file_after_restart(self):
+        key = "files/note.md"
+        original = self.castle / key
+        data = b"keep this file in recovery"
+        self.publish(key, data)
+        self.run_cli("sync")
+        self.publish("files/moved.md", data)
+        headers = {"X-Host-ID": self.inventory()["host"], "If-Match": '"1"',
+                   "X-Sync-Operation": secrets.token_hex(16)}
+        status, body = self.request("DELETE", PREFIX + "/" + key, headers)
+        self.assertEqual(status, 200, body)
+        self.stop_host()
+        self.start_host()
+        self.run_cli("sync")
+        self.assertFalse(original.exists())
+        self.assertEqual((self.castle / "files/moved.md").read_bytes(), data)
+        retained = list((self.work / "client/previous-versions/files/note.md").glob(".version-*"))
+        self.assertEqual([p.read_bytes() for p in retained], [data])
+        self.run_cli("sync")
+
+    @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
+    def test_delete_retry_after_lost_ack_and_restart(self):
+        local = self.castle / "files/note.md"
+        local.write_bytes(b"recoverable")
+        self.run_cli("sync")
+        local.unlink()
+        with self.proxy("delete-ack"):
+            self.run_cli("sync", code=1)
+        self.stop_host()
+        self.start_host()
+        self.connect(self.url)
+        self.run_cli("sync")
+        status, body = self.request("GET", headers={"X-Coven-Deletions": "1"})
+        self.assertEqual(status, 200)
+        self.assertEqual(json.loads(body)["deleted"], {"files/note.md": 2})
+        self.assertFalse(local.exists())
+        self.assertEqual(self.request("GET", PREFIX + "/files/note.md")[0], 404)
+
+    @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
+    def test_deleted_path_rejects_peer_rollback(self):
+        local = self.castle / "files/note.md"
+        local.write_bytes(b"before deletion")
+        self.run_cli("sync")
+        self.stop_host()
+        database = self.work / "server/host.sqlite"
+        snapshot = self.work / "snapshot.sqlite"
+        shutil.copyfile(database, snapshot)
+        self.start_host()
+        local.unlink()
+        self.run_cli("sync")
+        self.stop_host()
+        shutil.copyfile(snapshot, database)
+        self.start_host()
+        self.assertIn(b"history missing or rolled back", self.run_cli("sync", code=1))
+        self.assertFalse(local.exists())
+        self.assert_remote("files/note.md", b"before deletion", 1)
+
+    @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
+    def test_delete_edit_conflict_resolves_either_side(self):
+        for deleted in ("local", "remote"):
+            for choice in ("local", "remote"):
+                with self.subTest(deleted=deleted, choice=choice):
+                    key = f"files/{deleted}-{choice}.md"
+                    path = self.castle / key
+                    self.publish(key, b"base")
+                    self.run_cli("sync")
+                    edit = key.encode()
+                    if deleted == "local":
+                        path.unlink()
+                        self.publish(key, edit)
+                    else:
+                        path.write_bytes(edit)
+                        headers = {"X-Host-ID": self.inventory()["host"], "If-Match": '"1"',
+                                   "X-Sync-Operation": secrets.token_hex(16)}
+                        self.assertEqual(self.request("DELETE", PREFIX + "/" + key, headers)[0], 200)
+                    self.assertIn(b"unresolved conflicts", self.run_cli("sync", code=1))
+                    self.assertIn(b"Conflicts: 1", self.run_cli("status"))
+                    self.run_cli("resolve", key, "--" + choice)
+                    self.run_cli("sync")
+                    if choice == deleted:
+                        self.assertFalse(path.exists())
+                        self.assertEqual(self.request("GET", PREFIX + "/" + key)[0], 404)
+                    else:
+                        self.assertEqual(path.read_bytes(), edit)
+                        self.assert_remote(key, edit, 3 if deleted == "remote" else 2)
+                    copies = (self.work / "client/recovery").glob("*-" + sha256(edit).hexdigest())
+                    self.assertIn(edit, [copy.read_bytes() for copy in copies])
+
     def test_exclusions_local_limit_and_deletion_boundary(self):
         files = self.castle / "files"
         for name in (".git", ".env.local", "private.key", "credentials.json", "wait.tmp", "node_modules"):
@@ -345,16 +449,20 @@ class Integration(unittest.TestCase):
         self.run_cli("sync")
         self.assertEqual([row["path"] for row in self.inventory()["files"]], ["files/note.md"])
         note.rename(files / "renamed.md")
-        self.assertIn(b"deletion propagation unsupported", self.run_cli("sync", code=1))
+        if os.environ.get("COVEN_TEST_NATIVE"):
+            self.run_cli("sync")
+            self.assertEqual(self.request("GET", PREFIX + "/files/note.md")[0], 404)
+        else:
+            self.assertIn(b"deletion propagation unsupported", self.run_cli("sync", code=1))
+            self.assert_remote("files/note.md", b"keep on host", 1)
         self.assertFalse(note.exists())
-        self.assert_remote("files/note.md", b"keep on host", 1)
         self.assert_remote("files/renamed.md", b"keep on host", 1)
         self.root.rename(self.work / "unmounted")
         self.assertIn(b"root unavailable or unsafe", self.run_cli("sync", code=1))
         status = self.run_cli("status")
         self.assertIn(b"Status: needs attention", status)
         self.assertIn(b"Pending local paths: unknown", status)
-        self.assert_remote("files/note.md", b"keep on host", 1)
+        self.assert_remote("files/renamed.md", b"keep on host", 1)
 
     def test_aggregate_quota_is_enforced_by_both_sides(self):
         body = b"\0" * MAX_FILE

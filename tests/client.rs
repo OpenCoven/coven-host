@@ -77,3 +77,32 @@ fn offline_status_identifies_bytes_saved_through_a_displaced_open_file() {
     assert_eq!(fs::read(copy).unwrap(), b"edited after replacement");
     assert_eq!(fs::read(&path).unwrap(), b"downloaded");
 }
+
+#[test]
+fn offline_reopen_adds_deletion_tables_and_reports_outstanding_receipt() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("Castle");
+    let state = base.join("state");
+    let client = Client::new(&state);
+    client.initialize(&root).unwrap();
+    let db = rusqlite::Connection::open(state.join("client.sqlite")).unwrap();
+    db.execute_batch("DROP TABLE deleted_baseline; DROP TABLE pending_delete;")
+        .unwrap();
+    db.execute(
+        "INSERT INTO baseline VALUES (?1,1,?2)",
+        ("files/old", coven_host::digest(b"old")),
+    )
+    .unwrap();
+    let reopened = Client::new(&state);
+    assert_eq!(reopened.status().unwrap()["pendingPaths"], 1);
+    db.execute(
+        "INSERT INTO pending_delete VALUES (1,'files/old',1,?1)",
+        ["1234567890abcdef1234567890abcdef"],
+    )
+    .unwrap();
+    let status = reopened.status().unwrap();
+    assert_eq!(status["awaitingAcknowledgement"], "files/old");
+    assert_eq!(status["pendingPaths"], 1);
+    assert!(!root.join("Castles/demo/files/old").exists());
+}

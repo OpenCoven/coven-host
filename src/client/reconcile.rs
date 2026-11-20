@@ -7,6 +7,41 @@ fn parents(path: &str) -> impl Iterator<Item = &str> {
 }
 
 impl Client {
+    fn flush_pending_delete(&self, db: &Connection, remote: &Peer) -> Result<()> {
+        let pending = db
+            .query_row(
+                "SELECT path,expected,operation FROM pending_delete WHERE slot=1",
+                [],
+                |r| {
+                    Ok((
+                        r.get::<_, String>(0)?,
+                        r.get::<_, i64>(1)?,
+                        r.get::<_, String>(2)?,
+                    ))
+                },
+            )
+            .optional()?;
+        if let Some((path, expected, op)) = pending {
+            match remote.delete(&path, expected, &op) {
+                Ok(()) => {
+                    let tx = db.unchecked_transaction()?;
+                    tx.execute("DELETE FROM baseline WHERE path=?", [&path])?;
+                    tx.execute(
+                        "INSERT OR REPLACE INTO deleted_baseline VALUES (?,?)",
+                        params![path, expected + 1],
+                    )?;
+                    tx.execute("DELETE FROM pending_delete", [])?;
+                    tx.commit()?;
+                }
+                Err(e) if peer::is_precondition(&e) => {
+                    db.execute("DELETE FROM pending_delete", [])?;
+                }
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(())
+    }
+
     fn flush_pending(&self, db: &Connection, remote: &Peer) -> Result<Option<String>> {
         let pending = db
             .query_row(
@@ -90,15 +125,13 @@ impl Client {
 
         let mut remote = self.remote(db)?;
         let conflicts = conflicts(db)?;
-        check_history(
-            &baseline(db)?,
-            &conflicts,
-            &self.inventory(db, &mut remote)?,
-        )?;
+        let initial = self.inventory(db, &mut remote)?;
+        check_history(db, &baseline(db)?, &conflicts, &initial, &remote)?;
+        self.flush_pending_delete(db, &remote)?;
         let mut errors: Vec<_> = self.flush_pending(db, &remote)?.into_iter().collect();
         let items = self.inventory(db, &mut remote)?;
         let base = baseline(db)?;
-        check_history(&base, &conflicts, &items)?;
+        check_history(db, &base, &conflicts, &items, &remote)?;
         let all: BTreeSet<_> = scan
             .files
             .keys()
@@ -117,10 +150,55 @@ impl Client {
             let item = items.get(path);
             let old = base.get(path);
             let old_sha = old.map(|(_, s)| s.as_str());
-            if sha.is_none() && old.is_some() {
-                errors.push(format!(
-                    "{path}: deletion propagation unsupported; remote copy preserved"
-                ));
+            if let Some(revision) = remote.deleted.as_ref().and_then(|d| d.get(path))
+                && let Some((_, previous_sha)) = old
+            {
+                if let Some(sha) = sha
+                    && (conflicts.contains_key(path) || sha != previous_sha)
+                {
+                    let local = self.archive(path, "local", &read_matching(folder, path, sha)?)?;
+                    db.execute(
+                        "INSERT OR REPLACE INTO conflicts VALUES (?,?,'',?)",
+                        params![path, local, revision],
+                    )?;
+                    continue;
+                }
+                if let Some(sha) = sha {
+                    folder.retain_deleted(path, sha)?;
+                    scan.files.remove(path);
+                }
+                let tx = db.unchecked_transaction()?;
+                tx.execute("DELETE FROM baseline WHERE path=?", [path])?;
+                tx.execute(
+                    "INSERT OR REPLACE INTO deleted_baseline VALUES (?,?)",
+                    params![path, revision],
+                )?;
+                tx.commit()?;
+                continue;
+            }
+            if sha.is_none()
+                && let Some((rev, previous_sha)) = old
+            {
+                if remote.deleted.is_none() {
+                    errors.push(format!(
+                        "{path}: deletion propagation unsupported; remote copy preserved"
+                    ));
+                } else if conflicts.contains_key(path)
+                    || item.is_none_or(|i| i.revision != *rev || i.sha256 != *previous_sha)
+                {
+                    let item = item.context("remote conflict input is missing")?;
+                    let copy = self.archive(path, "remote", &remote.download(path, item)?)?;
+                    db.execute(
+                        "INSERT OR REPLACE INTO conflicts VALUES (?,'',?,?)",
+                        params![path, copy, item.revision],
+                    )?;
+                } else if folder.read(path)?.is_none() {
+                    db.execute(
+                        "INSERT INTO pending_delete VALUES (1,?,?,?)",
+                        params![path, rev, Uuid::new_v4().simple().to_string()],
+                    )?;
+                    self.flush_pending_delete(db, &remote)?;
+                }
                 continue;
             }
             if (item.is_some()
@@ -183,7 +261,10 @@ impl Client {
                 }
                 (Some(sha), item) => {
                     let data = read_matching(folder, path, sha)?;
-                    let expected = item.map_or(0, |i| i.revision);
+                    let expected = item
+                        .map(|i| i.revision)
+                        .or_else(|| remote.deleted.as_ref()?.get(path).copied())
+                        .unwrap_or(0);
                     db.execute(
                         "INSERT INTO pending VALUES (1,?,?,?,?)",
                         params![path, expected, Uuid::new_v4().simple().to_string(), data],
