@@ -130,3 +130,151 @@ fn failed_receipt_insert_rolls_back_bytes_and_revision() {
         .unwrap();
     assert_eq!(peer.inventory().unwrap()["results/file"].revision, 2);
 }
+
+/// Compare committed rows, including pending operation IDs and payloads, without
+/// exposing local configuration or credential paths in assertion diagnostics.
+fn profile_rows(state: &Path) -> Vec<Vec<Vec<rusqlite::types::Value>>> {
+    let db = rusqlite::Connection::open_with_flags(
+        state.join("client.sqlite"),
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+    )
+    .unwrap();
+    ["settings", "baseline", "pending", "conflicts", "incoming"]
+        .map(|table| {
+            let mut query = db
+                .prepare(&format!("SELECT * FROM {table} ORDER BY 1"))
+                .unwrap();
+            let columns = query.column_count();
+            query
+                .query_map([], |row| (0..columns).map(|i| row.get(i)).collect())
+                .unwrap()
+                .collect::<rusqlite::Result<Vec<_>>>()
+                .unwrap()
+        })
+        .into()
+}
+
+#[test]
+fn profile_refusal_preserves_both_peers_and_conflicts() {
+    use coven_host::Client;
+    use std::fs;
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("castle");
+    let note = root.join("Castles/demo/files/note");
+    let key = "files/note";
+    let homes = [base.join("a"), base.join("b")];
+    let states = homes.each_ref().map(|home| home.join("state"));
+    let servers = [
+        Server::start(&base.join("peer-a")),
+        Server::start(&base.join("peer-b")),
+    ];
+    let mut peers = servers.each_ref().map(Server::peer);
+    let legacy = states.each_ref().map(|state| Client::new(state));
+    for i in 0..2 {
+        legacy[i].initialize(&root).unwrap();
+        let token = states[i].join("test-token");
+        fs::write(&token, TOKEN).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
+        }
+        legacy[i].connect(&servers[i].1, &token).unwrap();
+        fs::write(&note, b"baseline").unwrap();
+        assert_eq!(legacy[i].sync().unwrap()["phase"], "synced");
+        peers[i].inventory().unwrap();
+        peers[i].upload(key, &[i as u8], 1, None).unwrap();
+    }
+    assert_ne!(peers[0].identity, peers[1].identity);
+    fs::write(&note, b"offline change").unwrap();
+    for client in &legacy {
+        assert_eq!(client.sync().unwrap()["phase"], "needs attention");
+        assert_eq!(client.status().unwrap()["conflicts"][0]["path"], key);
+    }
+    let profile = |i: usize| Client::for_profile(&states[i], &homes[i]);
+    let owner = profile(0);
+    owner.initialize(&root).unwrap();
+    let alias = base.join("castle-alias");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&root, &alias).unwrap();
+    #[cfg(windows)]
+    assert!(
+        Command::new("cmd")
+            .args(["/d", "/c", "mklink", "/J"])
+            .arg(&alias)
+            .arg(&root)
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert_eq!(alias.canonicalize().unwrap(), root.canonicalize().unwrap());
+    let snapshot = || {
+        let profiles = states.each_ref().map(|state| {
+            let mut copies = fs::read_dir(state.join("recovery"))
+                .unwrap()
+                .map(|entry| {
+                    let entry = entry.unwrap();
+                    (entry.file_name(), fs::read(entry.path()).unwrap())
+                })
+                .collect::<Vec<_>>();
+            copies.sort();
+            assert!(copies.len() >= 2);
+            (profile_rows(state), copies)
+        });
+        (
+            profiles,
+            fs::read(&note).unwrap(),
+            fs::read(root.join(".coven-profile")).unwrap(),
+        )
+    };
+    let before = snapshot();
+    let refuse = || {
+        let competitor = profile(1);
+        assert!(
+            competitor
+                .initialize(&root)
+                .unwrap_err()
+                .to_string()
+                .contains("different daemon profile")
+        );
+        assert!(
+            before == snapshot(),
+            "canonical refusal changed existing state"
+        );
+        let error = competitor.initialize(&alias).unwrap_err();
+        #[cfg(unix)]
+        assert!(
+            matches!(
+                error
+                    .downcast_ref::<std::io::Error>()
+                    .and_then(|e| e.raw_os_error()),
+                Some(libc::ENOTDIR | libc::ELOOP)
+            ),
+            "unexpected alias refusal: {error}"
+        );
+        #[cfg(windows)]
+        assert!(
+            error
+                .to_string()
+                .contains("reparse points and junctions are unsafe"),
+            "unexpected alias refusal: {error}"
+        );
+        assert!(before == snapshot(), "alias refusal changed existing state");
+    };
+    refuse();
+    drop(owner);
+    refuse();
+    let reopened = profile(0);
+    reopened.resolve(key, "local", None).unwrap();
+    assert_eq!(reopened.sync().unwrap()["phase"], "synced");
+    for (i, peer) in peers.iter_mut().enumerate() {
+        let item = peer.inventory().unwrap().remove(key).unwrap();
+        let bytes = peer.download(key, &item).unwrap();
+        if i == 0 {
+            assert_eq!(bytes, b"offline change");
+        } else {
+            assert_eq!(bytes, [1]);
+        }
+    }
+}
