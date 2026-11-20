@@ -1,0 +1,38 @@
+main { width: min(92vw, 54rem); margin: 5vh auto; }
+#crown-mount { min-width: 0; }
+.crown-viewer { border: 1px solid #403a4c; background: #141318; }
+.crown-stage {
+  position: relative;
+  isolation: isolate;
+  aspect-ratio: 3 / 2;
+  background: radial-gradient(ellipse at 50% 48%, #3a2f4d 0%, #211c2c 44%, #100f16 84%);
+}
+.crown-stage::before {
+  position: absolute; inset: 0; content: ""; pointer-events: none;
+  background-image: linear-gradient(#c6a8ff08 1px, transparent 1px), linear-gradient(90deg, #c6a8ff08 1px, transparent 1px);
+  background-size: 2rem 2rem;
+}
+.crown-stage::after {
+  position: absolute; z-index: -1; bottom: 11%; left: 24%; width: 52%; height: 8%; content: "";
+  background: radial-gradient(ellipse, #090710ba, transparent 70%);
+}
+.crown-poster, .crown-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.crown-poster { object-fit: contain; }
+.crown-stage canvas { cursor: grab; touch-action: pan-y; }
+.crown-stage canvas:active { cursor: grabbing; }
+.crown-viewer :focus-visible { outline: 2px solid var(--violet); outline-offset: -3px; }
+.crown-viewer figcaption { flex-wrap: wrap; gap: .35rem .75rem; }
+.crown-viewer figcaption strong { color: var(--ink); font: 500 .93rem/1.5 Inter, sans-serif; }
+#crown-help { display: block; max-width: 32ch; margin-top: .15rem; font: .76rem/1.45 Inter, sans-serif; }
+.crown-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; }
+.crown-viewer button { display: grid; place-items: center; min-width: 44px; min-height: 44px; padding: 0 .5rem; border: 1px solid transparent; border-radius: 5px; color: var(--body); background: transparent; font: 500 .8rem Inter, sans-serif; cursor: pointer; }
+.crown-viewer button:hover, .crown-viewer button:focus-visible { background: #292332; color: var(--violet); }
+.crown-viewer button:disabled { opacity: .4; cursor: default; }
+.crown-viewer .expand-crown { position: absolute; top: .7rem; right: .7rem; border-color: #53495e; background: #151219; }
+.crown-viewer [hidden] { display: none !important; }
+#crown-dialog { width: 100vw; height: 100dvh; max-width: none; max-height: none; padding: 0; border: 0; color: var(--ink); background: var(--bg); }
+#crown-dialog::backdrop { background: #08070bec; }
+#crown-dialog .crown-viewer { display: flex; flex-direction: column; height: 100%; }
+#crown-dialog .crown-stage { aspect-ratio: auto; flex: 1; min-height: 6rem; }
+html:has(#crown-dialog[open]) { overflow: hidden; }
+#crown-dialog canvas { touch-action: none; }
