@@ -14,3 +14,7 @@ The Rust library in this repository implements file transfer, reconciliation and
 | Check which binaries, platforms and behaviors passed | [Acceptance report and verification commands](docs/acceptance.md) |
 
 The MVP supports a single client, peer and Castle. Creates and updates propagate in both directions. A deletion is reported for resolution and the peer keeps its copy.
+
+## Preview the Host landing page
+
+Open [the landing page](docs/index.html) from a local checkout, or run `python3 -m http.server --directory docs 8000` and visit [localhost](http://localhost:8000/).
