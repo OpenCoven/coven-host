@@ -20,4 +20,6 @@ Host PR #1 is merged. The [v0.1.1 installer guide](setup.md) is the entry point 
 
 ## Scope for follow-up work
 
-This iteration covers creation, updates and explicit conflict resolution in the demo Castle. Missing files remain visible as unresolved work. Multi-client coordination, propagated deletion, additional Castles and execution of uploaded documents would change the operating contract and belong in separately scoped issues.
+[Host #5](https://github.com/OpenCoven/coven-host/issues/5) adds deletion and rename reconciliation to the demo Castle. The Coven consumer pin and distributed packages still use the earlier behavior. Multi-client coordination, additional Castles and execution of uploaded documents have separate tracking issues.
+
+To verify #5 from a full checkout, run `./tests/compat-linux.sh --deletions` with Git, a Rust toolchain, Python 3.11+ and a filesystem supporting native replacement. It starts disposable Rust endpoints and checks both rename directions, conflict choices, acknowledgement loss and rollback. Run the script without arguments on Linux to include the historical Python pairings and stopped-installation upgrades.

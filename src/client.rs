@@ -143,6 +143,11 @@ impl Client {
         }
         let db = Connection::open_with_flags(&path, flags)?;
         db.pragma_update(None, "synchronous", "FULL")?;
+        if !init {
+            let tx = db.unchecked_transaction()?;
+            tx.execute_batch(include_str!("client/deletion_schema.sql"))?;
+            tx.commit()?;
+        }
         Ok(db)
     }
 
@@ -158,6 +163,7 @@ impl Client {
         let mut db = self.db(true)?;
         let tx = db.transaction()?;
         tx.execute_batch(include_str!("client/schema.sql"))?;
+        tx.execute_batch(include_str!("client/deletion_schema.sql"))?;
         if let Some(other) = setting(&tx, "root")? {
             ensure!(
                 identity_path(Path::new(&other))? == identity_path(root)?,
@@ -311,7 +317,74 @@ impl Client {
         let scan = folder.scan()?;
         let mut remote = self.remote(&db)?;
         let items = self.inventory(&db, &mut remote)?;
-        check_history(&baseline(&db)?, &conflicts, &items)?;
+        check_history(&db, &baseline(&db)?, &conflicts, &items, &remote)?;
+        if conflict.local.is_empty() || conflict.remote.is_empty() {
+            let local = folder.read(path)?;
+            let local_sha = local.as_deref().map(digest);
+            ensure!(
+                match &local_sha {
+                    Some(sha) => conflict.local.ends_with(&format!("-{sha}")),
+                    None => conflict.local.is_empty(),
+                },
+                "local conflict input changed; sync again before resolving"
+            );
+            let item = items.get(path);
+            let distant = if let Some(item) = item {
+                ensure!(
+                    item.revision == conflict.revision
+                        && conflict.remote.ends_with(&format!("-{}", item.sha256)),
+                    "remote conflict input changed; sync again before resolving"
+                );
+                Some(remote.download(path, item)?)
+            } else {
+                ensure!(
+                    conflict.remote.is_empty()
+                        && remote.deleted.as_ref().and_then(|d| d.get(path))
+                            == Some(&conflict.revision),
+                    "remote conflict input changed; sync again before resolving"
+                );
+                None
+            };
+            let selected = match (choice, merged) {
+                ("local", None) => local.clone(),
+                ("remote", None) => distant,
+                ("merged", Some(source)) => Some(read_external(source, MAX_FILE)?),
+                _ => bail!("choose local, remote or a merged file"),
+            };
+            if selected != local {
+                if let Some(data) = selected {
+                    ensure!(
+                        scan.files.values().map(|(_, size)| size).sum::<usize>()
+                            - local.as_ref().map_or(0, Vec::len)
+                            + data.len()
+                            <= MAX_TOTAL,
+                        "resolution exceeds Castle storage limits"
+                    );
+                    folder.replace(path, &data, local_sha.as_deref())?;
+                } else if let Some(sha) = local_sha {
+                    folder.retain_deleted(path, &sha)?;
+                }
+            }
+            let tx = db.unchecked_transaction()?;
+            if let Some(item) = item {
+                record(&tx, path, item.revision, &item.sha256)?;
+            } else {
+                tx.execute("DELETE FROM baseline WHERE path=?", [path])?;
+                tx.execute(
+                    "INSERT OR REPLACE INTO deleted_baseline VALUES (?,?)",
+                    params![path, conflict.revision],
+                )?;
+            }
+            tx.execute("DELETE FROM conflicts WHERE path=?", [path])?;
+            set(&tx, "phase", "needs attention")?;
+            set(
+                &tx,
+                "error",
+                "resolution saved; run sync to confirm convergence",
+            )?;
+            tx.commit()?;
+            return Ok(());
+        }
         let item = items
             .get(path)
             .context("remote conflict input is missing")?;
@@ -373,7 +446,11 @@ impl Client {
         let mut state = setting(&db, "phase")?.unwrap_or_else(|| "needs attention".into());
         let mut error = setting(&db, "error")?.unwrap_or_else(|| "run connect and sync".into());
         let pending: Option<String> = db
-            .query_row("SELECT path FROM pending", [], |r| r.get(0))
+            .query_row(
+                "SELECT path FROM pending UNION ALL SELECT path FROM pending_delete LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
             .optional()?;
         let base = baseline(&db)?;
         let count = match folder.scan() {
@@ -392,7 +469,7 @@ impl Client {
                 if !deleted.is_empty() {
                     state = "needs attention".into();
                     error = format!(
-                        "deletion propagation unsupported; remote copy preserved: {}",
+                        "missing local paths awaiting reconciliation: {}",
                         deleted.join(", ")
                     );
                 }
@@ -412,8 +489,10 @@ impl Client {
             .map(|(path, conflict)| {
                 json!({
                     "path": path,
-                    "local": recovery.join(conflict.local),
-                    "remote": recovery.join(conflict.remote),
+                    "local": (!conflict.local.is_empty()).then(|| recovery.join(&conflict.local)),
+                    "localDeleted": conflict.local.is_empty(),
+                    "remote": (!conflict.remote.is_empty()).then(|| recovery.join(&conflict.remote)),
+                    "remoteDeleted": conflict.remote.is_empty(),
                     "revision": conflict.revision
                 })
             })
@@ -467,25 +546,61 @@ impl Client {
 }
 
 fn check_history(
+    db: &Connection,
     base: &Baseline,
     conflicts: &BTreeMap<String, Conflict>,
     items: &BTreeMap<String, Item>,
+    remote: &Peer,
 ) -> Result<()> {
     let verify = |path: &str, revision: i64, sha: &str| -> Result<()> {
         ensure!(
-            items.get(path).is_some_and(
-                |i| i.revision > revision || (i.revision == revision && i.sha256 == sha)
-            ),
+            remote
+                .deleted
+                .as_ref()
+                .and_then(|d| d.get(path))
+                .is_some_and(|v| *v > revision)
+                || items.get(path).is_some_and(
+                    |i| i.revision > revision || (i.revision == revision && i.sha256 == sha)
+                ),
             "{path}: host history missing or rolled back; check persistent host storage"
         );
         Ok(())
     };
+    let mut q = db.prepare("SELECT path,revision FROM deleted_baseline")?;
+    let mut rows = q.query([])?;
+    while let Some(row) = rows.next()? {
+        let path: String = row.get(0)?;
+        let rev: i64 = row.get(1)?;
+        ensure!(
+            remote
+                .deleted
+                .as_ref()
+                .and_then(|d| d.get(&path))
+                .is_some_and(|v| *v >= rev)
+                || items.get(&path).is_some_and(|i| i.revision > rev),
+            "{path}: deleted path history missing or rolled back"
+        );
+    }
     for (path, (revision, sha)) in base {
         verify(path, *revision, sha)?;
     }
     // A conflict is a newer durable observation even though the two sides have not converged.
     // Python and Rust both use the verified payload digest as the last part of the copy name.
     for (path, conflict) in conflicts {
+        if conflict.remote.is_empty() {
+            ensure!(
+                remote
+                    .deleted
+                    .as_ref()
+                    .and_then(|d| d.get(path))
+                    .is_some_and(|v| *v >= conflict.revision)
+                    || items
+                        .get(path)
+                        .is_some_and(|i| i.revision > conflict.revision),
+                "{path}: deletion conflict history missing or rolled back"
+            );
+            continue;
+        }
         let (_, sha) = conflict
             .remote
             .rsplit_once('-')
