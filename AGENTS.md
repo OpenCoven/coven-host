@@ -13,7 +13,7 @@ gitleaks version
 git config --local core.hooksPath .githooks
 ```
 
-Git runs the guard against the staged changes on commit. It uses Gitleaks’ default rules plus checks for Coven Host tokens, local environment files, binary keystores and sync databases. A missing scanner or a finding blocks the commit. To check the index manually, run `git hook run pre-commit`. After changing the guard, run `./tests/pre-commit.sh` to exercise blocked and allowed commits in a disposable repository. If it flags a credential, remove it from the index and keep it in protected storage. If it was already shared, revoke or rotate it before cleaning up the published copy.
+Git runs the guard against the staged changes on commit. It uses Gitleaks’ default rules plus checks for Coven Host tokens, local environment files, binary keystores and sync databases. A missing scanner or a finding blocks the commit. To check the index manually, run `git hook run pre-commit`. After changing the guard, run `scripts/check.sh hook` to exercise blocked and allowed commits in a disposable repository. If it flags a credential, remove it from the index and keep it in protected storage. If it was already shared, revoke or rotate it before cleaning up the published copy.
 
 ## Find and claim work
 
@@ -30,11 +30,12 @@ Git runs the guard against the staged changes on commit. It uses Gitleaks’ def
 | Peer HTTP, authentication, revisions and retry receipts | `src/peer.rs`, `src/peer/server.rs` | `cargo test --locked --test peer` and Linux compatibility matrix |
 | Offline state, SQLite schema and conflict resolution | `src/client.rs`, `src/client/schema.sql`, `src/client/reconcile.rs` | `cargo test --locked --test client` and stopped-Python upgrade |
 | Atomic replacement, retained versions and filesystem boundaries | `src/folder.rs`, `src/folder/{unix,windows,windows_security,previous}.rs` | `cargo test --locked --test folder`, library unit tests and affected native filesystem |
-| Linux compatibility and upgrades | `tests/compat-linux.sh`, `examples/compat_client.rs` | `tests/test_integration.py`, `tests/test_upgrade.py` |
+| Linux compatibility and upgrades | `tests/compat-linux.sh`, `examples/compat_client.rs` | `scripts/check.sh compat`, which runs `tests/test_integration.py` and `tests/test_upgrade.py` |
+| Checks and CI | `scripts/check.sh`, `.github/workflows/ci.yml` | `scripts/check.sh --fast` and the pull request checks |
 | Desktop installation, login services and setup diagnostics | `installer/macos/`, `installer/windows/`, `installer/linux/` | [Build and qualify the desktop installers](installer/README.md) |
 | Native command dispatch, daemon API and installed packages | Separate Coven repository, including `crates/coven-cli/src/host_cli.rs`, `crates/coven-cli/src/host_sync.rs` and `crates/coven-client/src/host.rs` | Coven workspace tests and installed CLI with the production daemon |
 
-Use the [verification commands](docs/acceptance.md#run-the-checks) for the full suite and mixed-language matrix. Run file replacement and recovery changes on the affected volume type. For wire or schema changes, include retry after lost acknowledgement, host rollback and Python-created state. Use disposable roots, storage and tokens. Keep credentials and private recovery paths out of shared reports.
+Run `scripts/check.sh` before handing off; it runs the [verification commands](docs/acceptance.md#run-the-checks) that CI runs on every pull request. Use `scripts/check.sh --full` on Linux for the mixed-language matrix. Run file replacement and recovery changes on the affected volume type. For wire or schema changes, include retry after lost acknowledgement, host rollback and Python-created state. Use disposable roots, storage and tokens. Keep credentials and private recovery paths out of shared reports.
 
 ## Publishing a handoff
 

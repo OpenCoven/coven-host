@@ -58,19 +58,21 @@ The Python client passed all ten reference scenarios against the Rust peer. The 
 
 ## Run the checks
 
-From the repository root, run the Rust checks on the target OS. The example binary adapts the production library to the Python test harness.
+From the repository root, run `scripts/check.sh` on the target OS. CI runs the same script on every pull request, so a local pass and a CI pass mean the same thing.
 
-```sh
-cargo fmt --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked --all-targets
-cargo build --locked --example compat_client
-```
+| Command | Steps | Requirements |
+| --- | --- | --- |
+| `scripts/check.sh` or `scripts/check.sh --fast` | `rust`, `hook`, `kit` | Rust toolchain, Gitleaks 8.30.1 or a compatible v8 release, OpenSSL, Python 3.11+ |
+| `scripts/check.sh --full` | Adds `compat` | Linux with Python 3.11+ and a filesystem supporting atomic exchange, such as ext4 |
+| `scripts/check.sh STEP...` | The named steps only | Requirements of those steps |
 
-On Linux with Python 3.11+ and a filesystem supporting atomic exchange, run the three interoperability combinations and the in-place upgrade. The script extracts the historical reference from Git into a temporary directory and removes it on exit. A shallow checkout must fetch the fixture commit named by the script first. The sync engine and peer run natively in Rust. The Linux desktop setup launcher also uses Python.
+The steps run these checks:
 
-```sh
-./tests/compat-linux.sh
-```
+- `rust` runs `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked --all-targets` and `cargo build --locked --example compat_client`. The example binary adapts the production library to the Python test harness.
+- `hook` runs `./tests/pre-commit.sh`, which exercises the commit guard in a disposable repository.
+- `kit` runs the offline-kit regression test in `tests/test_offline_kit.py`.
+- `compat` runs `./tests/compat-linux.sh`: the three interoperability combinations and the in-place upgrade. The script extracts the historical reference from Git into a temporary directory and removes it on exit. A shallow checkout must fetch the fixture commit named by the script first. On other systems the script reports `compat` as not run instead of passing it. The sync engine and peer run natively in Rust. The Linux desktop setup launcher also uses Python.
+
+CI runs `rust` on Ubuntu (ext4), macOS (case-insensitive APFS) and Windows (NTFS), runs `kit` and `compat` on Ubuntu, and runs `hook` plus a Gitleaks scan of the change's commits. Hosted runners cover only their default volumes. Changes to replacement or recovery still need a run on the affected volume type, and the installed-package and SSH scenarios above remain manual.
 
 When reporting a failed case, include the first error, peer revision and which copies survived.
