@@ -28,7 +28,7 @@ Git runs the guard against the staged changes on commit. It uses Gitleaks’ def
 | --- | --- | --- |
 | Path grammar, exclusions and quotas | `src/lib.rs` | `cargo test --locked --test path_policy` |
 | Peer HTTP, authentication, revisions and retry receipts | `src/peer.rs`, `src/peer/server.rs` | `cargo test --locked --test peer` and Linux compatibility matrix |
-| Daemon profile ownership at initialization and reopen | `src/client.rs`, `src/folder.rs` | `cargo test --locked --test client profile` checks that exactly one profile wins, its owner can reopen, and legacy adoption requires explicit selection |
+| Daemon profile ownership at initialization and reopen | `src/client.rs`, `src/folder.rs` | `cargo test --locked --test client profile` checks that exactly one profile wins, its owner can reopen, and legacy adoption requires explicit selection. Run `cargo test --locked --test peer profile_refusal` to verify refusal preserves both profiles’ SQLite state, user bytes and retained copies and that the owner reconciles with its original peer |
 | Offline state, SQLite schema and conflict resolution | `src/client.rs`, `src/client/schema.sql`, `src/client/reconcile.rs` | `cargo test --locked --test client` and stopped-Python upgrade |
 | Atomic replacement, retained versions and filesystem boundaries | `src/folder.rs`, `src/folder/{unix,windows,windows_security,previous}.rs` | `cargo test --locked --test folder`, library unit tests and affected native filesystem |
 | Linux compatibility and upgrades | `tests/compat-linux.sh`, `examples/compat_client.rs` | `tests/test_integration.py`, `tests/test_upgrade.py` |
