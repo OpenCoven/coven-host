@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OpenCoven crown · Design archive</title>
+  <link rel="stylesheet" href="../../../docs/assets/host.css">
+  <link rel="stylesheet" href="crown.css">
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="turn-left" viewBox="0 0 24 24"><path d="m8 3-4 4 4 4M4 7h9a7 7 0 1 1-6.4 9.8"/></symbol>
+    <symbol id="turn-right" viewBox="0 0 24 24"><path d="m16 3 4 4-4 4m4-4h-9a7 7 0 1 0 6.4 9.8"/></symbol>
+    <symbol id="zoom-in" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+    <symbol id="zoom-out" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="expand" viewBox="0 0 24 24"><path d="M4 9V4h5m6 0h5v5m0 6v5h-5m-6 0H4v-5"/></symbol>
+    <symbol id="collapse" viewBox="0 0 24 24"><path d="M9 4v5H4m11-5v5h5m-5 11v-5h5m-11 5v-5H4"/></symbol>
+  </svg>
+  <main>
+    <div id="crown-mount">
+      <figure class="crown-viewer" aria-label="OpenCoven crown">
+        <div class="crown-stage">
+          <img class="crown-poster" src="crown-poster.webp" alt="A polished violet OpenCoven crown with beveled silver edges." width="3840" height="2560" fetchpriority="high">
+          <canvas hidden tabindex="0" aria-label="Interactive 3D OpenCoven crown" aria-describedby="crown-help"></canvas>
+          <button class="expand-crown" type="button" hidden data-action="expand" aria-label="Expand crown viewer" title="Expand crown viewer"><svg class="icon" aria-hidden="true"><use href="#expand"/></svg></button>
+        </div>
+        <figcaption>
+          <div><strong>OpenCoven crown</strong><span id="crown-help" hidden>Drag or use arrow keys to rotate. Pinch or use + and − to zoom.</span></div>
+          <div class="crown-controls" role="group" aria-label="Crown controls" hidden>
+            <button type="button" data-action="left" aria-label="Rotate left" title="Rotate left"><svg class="icon" aria-hidden="true"><use href="#turn-left"/></svg></button>
+            <button type="button" data-action="right" aria-label="Rotate right" title="Rotate right"><svg class="icon" aria-hidden="true"><use href="#turn-right"/></svg></button>
+            <button type="button" data-action="out" aria-label="Zoom out" title="Zoom out"><svg class="icon" aria-hidden="true"><use href="#zoom-out"/></svg></button>
+            <button type="button" data-action="in" aria-label="Zoom in" title="Zoom in"><svg class="icon" aria-hidden="true"><use href="#zoom-in"/></svg></button>
+            <button type="button" data-action="reset">Reset</button>
+          </div>
+        </figcaption>
+      </figure>
+    </div>
+    <dialog id="crown-dialog" aria-label="Expanded crown viewer"></dialog>
+  </main>
+  <script src="crown-mesh.js" defer></script>
+  <script src="crown-viewer.js" defer></script>
+</body>
+</html>
