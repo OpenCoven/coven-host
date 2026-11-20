@@ -34,7 +34,7 @@ Apple accepted the signed macOS app. After stapling the ticket, the release main
 
 ### Verify a release download
 
-The annotated release tag signs the SHA-256 digest of the release asset named `SHA256SUMS`. Use the verified tag in the private repository as the reference. Compare the digest printed for the manifest with the value in the signed tag message, then compare the selected installer with its entry in that manifest. The checksum file inside the offline ZIP covers the files in the extracted kit.
+The annotated release tag signs the SHA-256 digest of the release asset named `SHA256SUMS`. Use the verified release tag as the reference. Compare the digest printed for the manifest with the value in the signed tag message, then compare the selected installer with its entry in that manifest. The checksum file inside the offline ZIP covers the files in the extracted kit.
 
 With the Windows installer and the release manifest in Downloads, open PowerShell in that directory and run the following commands. The final two lines should show the same installer digest, ignoring letter case.
 

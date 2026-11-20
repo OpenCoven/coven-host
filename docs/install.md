@@ -2,7 +2,7 @@
 
 For the desktop installer and automatic local folder setup, use the [installer guide](setup.md). The instructions below apply to the v0.1.0 CLI packages.
 
-Download the CLI wrapper, the native package for your machine, and `SHA256SUMS` from the [Coven Host release](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.0). Access to the private repository is required. The packages install offline with npm and Node.js 18 or later. The release uses package version `0.1.0-host.1` to distinguish it from the public Coven CLI.
+Download the CLI wrapper, the native package for your machine, and `SHA256SUMS` from the [Coven Host release](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.0). The packages install offline with npm and Node.js 18 or later. The release uses package version `0.1.0-host.1` to distinguish it from the public Coven CLI.
 
 | Platform | Native package | Wrapper for every platform |
 | --- | --- | --- |
@@ -66,7 +66,7 @@ To check the result, save a file under `Castles/demo/files/`, synchronize, and r
 
 ## Build provenance
 
-The packages contain the Coven CLI and daemon from `40a5a18ed7abdaff6c6072695ecc0c186f4c0cd1` with the Coven Host Rust dependency pinned to `732d8c3a06fb51fc32ade8eba46ab384c3924968`. The release includes the signed integration commits in `coven-cli-host-source.bundle`. To inspect or rebuild them, clone OpenCoven/coven, then run these commands in that checkout with the downloaded bundle’s absolute path. Building requires read access to the private Coven Host dependency.
+The packages contain the Coven CLI and daemon from `40a5a18ed7abdaff6c6072695ecc0c186f4c0cd1` with the Coven Host Rust dependency pinned to `732d8c3a06fb51fc32ade8eba46ab384c3924968`. The release includes the signed integration commits in `coven-cli-host-source.bundle`. To inspect or rebuild them, clone OpenCoven/coven, then run these commands in that checkout with the downloaded bundle’s absolute path.
 
 ```sh
 git bundle verify /path/to/coven-cli-host-source.bundle
