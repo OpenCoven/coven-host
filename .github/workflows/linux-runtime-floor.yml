@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: cabec50ab0674a65988a768439f352d0b29702c7
+          ref: d572efe80362e83bb72fe78eb1df07ad71e27989
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -31,12 +31,14 @@ jobs:
       - name: Build the native consumer against glibc 2.34
         working-directory: consumer
         run: |
-          test "$(git write-tree)" = 5844d2c3a22e2622aa59ec05ca011aad938e6306
+          cargo update -p url --precise 2.5.9
+          git add Cargo.lock
+          test "$(git write-tree)" = b9abc86bc525195f7fd318c2cc8edae0b9d60e41
           toolchain=$(rustc --print sysroot)
           docker run --rm -v "$PWD:/src" -v "$toolchain:/opt/rust:ro" -w /src \
             almalinux@sha256:02df05719ef287ebd0df0a1eedb9172a00bd70703aed7b25660e426b8e0d6047 bash -ceu '
               dnf install -y gcc gcc-c++ git make openssl-devel perl perl-IPC-Cmd cmake pkgconf-pkg-config
-              export PATH="/opt/rust/bin:$PATH" COVEN_BUILD_VERSION=v0.1.2 COVEN_BUILD_COMMIT=29bb4f964f257d3f1cf8a3e2e32ab5657f65dd3b
+              export PATH="/opt/rust/bin:$PATH" COVEN_BUILD_VERSION=v0.1.2-review.3
               git config --global --add safe.directory /src
               getconf GNU_LIBC_VERSION
               cargo build --locked --release -p coven-cli
