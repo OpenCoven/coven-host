@@ -324,6 +324,28 @@ impl Folder {
         Ok(())
     }
 
+    pub(crate) fn retain_deleted(&self, path: &str, expected: &str) -> Result<()> {
+        validate_path(path)?;
+        let (relative, leaf) = path.rsplit_once('/').context("missing area")?;
+        let parent = self.parent(relative, false)?;
+        let scratch = self.scratch(&parent)?;
+        let id = Uuid::new_v4().simple().to_string();
+        let retained = previous::PreviousVersion::reserve_for_move(
+            &parent, leaf, &scratch, &id, path, expected,
+        )?;
+        ensure!(
+            self.parent(relative, false)?.id()? == parent.id()?
+                && digest(&read_at(&parent, leaf.as_ref(), MAX_FILE, false)?) == expected,
+            "{path}: file or parent changed during deletion; retry"
+        );
+        retained.retain_deleted(&parent, leaf, expected)?;
+        ensure!(
+            self.parent(relative, false)?.id()? == parent.id()?,
+            "{path}: parent moved during deletion; inspect previous versions"
+        );
+        Ok(())
+    }
+
     pub fn previous_versions(&self) -> Result<Vec<PathBuf>> {
         let mut files = previous::list(&self.state.join("previous-versions"))?;
         // Status also reports the root availability error separately. State-side

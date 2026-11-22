@@ -278,3 +278,37 @@ fn profile_refusal_preserves_both_peers_and_conflicts() {
         }
     }
 }
+
+#[test]
+fn deletion_receipt_survives_restart_and_recreation() {
+    let temp = tempfile::tempdir().unwrap();
+    let storage = temp.path().canonicalize().unwrap().join("storage");
+    let server = Server::start(&storage);
+    let mut peer = server.peer();
+    peer.inventory().unwrap();
+    let path = "files/note";
+    let op = "00000000000000000000000000000002";
+    peer.upload(path, b"archive me", 0, None).unwrap();
+    peer.delete(path, 1, op).unwrap();
+    drop(server);
+    let server = Server::start(&storage);
+    let mut peer = Peer::new(&server.1, TOKEN.into(), peer.identity).unwrap();
+    assert!(peer.inventory().unwrap().is_empty());
+    assert!(is_precondition(
+        &peer.upload(path, b"stale creation", 0, None).unwrap_err()
+    ));
+    peer.upload(path, b"new version", 2, None).unwrap();
+    peer.delete(path, 1, op).unwrap();
+    let item = &peer.inventory().unwrap()[path];
+    assert_eq!(item.revision, 3);
+    assert_eq!(peer.download(path, item).unwrap(), b"new version");
+    let db = rusqlite::Connection::open(storage.join("host.sqlite")).unwrap();
+    let retained: Vec<u8> = db
+        .query_row(
+            "SELECT bytes FROM deleted_versions WHERE path=? AND revision=2",
+            [path],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(retained, b"archive me");
+}

@@ -78,57 +78,73 @@ impl PreviousVersion {
         path: &str,
         expected: &str,
     ) -> Result<Self> {
-        let prepare = || -> Result<Self> {
-            validate_path(path)?;
-            let id = stage
-                .strip_prefix("exchange-")
-                .context("invalid exchange name")?;
-            let name = name(id, expected)?;
-            let archive = archive_path(scratch)?;
-            let dir = Dir::open(&archive, true)?;
-            ensure!(
-                dir.id()?.0 == scratch.id()?.0,
-                "previous versions must be on the destination volume"
-            );
-            native::check_private(&dir.file)?;
-            let lock = dir.open_lock(LOCK.as_ref())?;
-            native::check_private(&lock)?;
-            fs2::FileExt::lock_exclusive(&lock)?;
-            let mut bytes = native::fingerprint(&parent.open_file(leaf.as_ref())?)?.size;
-            let mut count = 1;
-            walk(&dir, 0, &mut |directory, entry| {
-                count += 1;
-                bytes =
-                    bytes.saturating_add(native::fingerprint(&directory.open_file(entry)?)?.size);
-                ensure!(
-                    count <= MAX_FILES && bytes <= MAX_TOTAL as u64,
-                    "previous versions are full; close editors, back up and move older versions out of {} before retrying (100 MiB or 1000 files)",
-                    archive.display()
-                );
-                Ok(())
-            })?;
-            ensure!(
-                bytes <= MAX_TOTAL as u64,
-                "previous version exceeds archive limit"
-            );
-            let mut destination = dir;
-            for part in path.split('/') {
-                destination = destination.child(part.as_ref(), true)?;
-            }
-            Ok(Self {
-                dir: destination,
-                name,
-                _reservation: lock,
-            })
-        };
-        match prepare() {
-            Ok(candidate) => Ok(candidate),
-            Err(e) => {
-                // Reservation always precedes publication. Only the incoming transfer exists here.
-                scratch.remove(stage)?;
-                Err(e)
-            }
+        let result = stage
+            .strip_prefix("exchange-")
+            .context("invalid exchange name")
+            .and_then(|id| Self::reserve_for_move(parent, leaf, scratch, id, path, expected));
+        if result.is_err() {
+            scratch.remove(stage)?;
         }
+        result
+    }
+
+    pub(super) fn reserve_for_move(
+        parent: &Dir,
+        leaf: &str,
+        scratch: &Dir,
+        id: &str,
+        path: &str,
+        expected: &str,
+    ) -> Result<Self> {
+        validate_path(path)?;
+        let name = name(id, expected)?;
+        let archive = archive_path(scratch)?;
+        let dir = Dir::open(&archive, true)?;
+        ensure!(
+            dir.id()?.0 == scratch.id()?.0,
+            "previous versions must be on the destination volume"
+        );
+        native::check_private(&dir.file)?;
+        let lock = dir.open_lock(LOCK.as_ref())?;
+        native::check_private(&lock)?;
+        fs2::FileExt::lock_exclusive(&lock)?;
+        let mut bytes = native::fingerprint(&parent.open_file(leaf.as_ref())?)?.size;
+        let mut count = 1;
+        walk(&dir, 0, &mut |directory, entry| {
+            count += 1;
+            bytes = bytes.saturating_add(native::fingerprint(&directory.open_file(entry)?)?.size);
+            ensure!(
+                count <= MAX_FILES && bytes <= MAX_TOTAL as u64,
+                "previous versions are full; close editors, back up and move older versions out of {} before retrying (100 MiB or 1000 files)",
+                archive.display()
+            );
+            Ok(())
+        })?;
+        ensure!(
+            bytes <= MAX_TOTAL as u64,
+            "previous version exceeds archive limit"
+        );
+        let mut destination = dir;
+        for part in path.split('/') {
+            destination = destination.child(part.as_ref(), true)?;
+        }
+        Ok(Self {
+            dir: destination,
+            name,
+            _reservation: lock,
+        })
+    }
+
+    pub(super) fn retain_deleted(&self, parent: &Dir, leaf: &str, expected: &str) -> Result<()> {
+        parent.move_new(leaf, &self.dir, &self.name)?;
+        let retained = super::read_at(&self.dir, self.name.as_ref(), crate::MAX_FILE, false)?;
+        if crate::digest(&retained) != expected {
+            self.dir
+                .move_new(&self.name, parent, leaf)
+                .context("local edit raced with deletion; inspect previous versions")?;
+            anyhow::bail!("local edit raced with deletion; sync again");
+        }
+        Ok(())
     }
 
     pub fn promote(&self, scratch: &Dir, source: &str) -> Result<()> {
