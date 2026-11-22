@@ -137,6 +137,7 @@ impl Client {
             .keys()
             .chain(items.keys())
             .chain(base.keys())
+            .chain(conflicts.keys())
             .cloned()
             .collect();
         let mut paths: Vec<_> = all.into_iter().collect();
@@ -151,10 +152,10 @@ impl Client {
             let old = base.get(path);
             let old_sha = old.map(|(_, s)| s.as_str());
             if let Some(revision) = remote.deleted.as_ref().and_then(|d| d.get(path))
-                && let Some((_, previous_sha)) = old
+                && (old.is_some() || conflicts.contains_key(path))
             {
                 if let Some(sha) = sha
-                    && (conflicts.contains_key(path) || sha != previous_sha)
+                    && (conflicts.contains_key(path) || Some(sha) != old_sha)
                 {
                     let local = self.archive(path, "local", &read_matching(folder, path, sha)?)?;
                     db.execute(
@@ -168,6 +169,8 @@ impl Client {
                     scan.files.remove(path);
                 }
                 let tx = db.unchecked_transaction()?;
+                // Both sides now agree on deletion. Keep any archived conflict bytes.
+                tx.execute("DELETE FROM conflicts WHERE path=?", [path])?;
                 tx.execute("DELETE FROM baseline WHERE path=?", [path])?;
                 tx.execute(
                     "INSERT OR REPLACE INTO deleted_baseline VALUES (?,?)",
