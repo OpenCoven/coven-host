@@ -458,10 +458,15 @@ final class Installer {
         }
         try authenticate(endpoint, secret)
         step(.folder)
-        if try info(clientDB) == nil {
+        // Older profiles have a configured SQLite root but no on-disk ownership marker.
+        // Native init checks that binding before migrating and refuses a competing profile.
+        var status = try run(binary.path, ["host", "status"], env: env)
+        if !hasClientDB || (status.status != 0 && status.text.contains("Castle ownership is unverified")) {
             _ = try checked(binary, ["host", "init", "--root", root.path])
+            status = try checked(binary, ["host", "status"])
+        } else if status.status != 0 {
+            throw SetupFailure(stage, "COMMAND-FOLDER", "The native service could not inspect the configured folder.", "Reopen the installer with the original folder and profile.", classify(status))
         }
-        let status = try checked(binary, ["host", "status"])
         guard let details = try JSONSerialization.jsonObject(with: status.bytes) as? [String: Any], details["root"] as? String == root.path else { throw preserve("The client is bound to another folder.") }
         step(.connection)
         if let configured = details["remote"] as? String {
