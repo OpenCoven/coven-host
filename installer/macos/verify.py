@@ -95,7 +95,8 @@ def exercise(app, verifier, legacy_payload, previous_app=None, previous_verifier
             run(verifier, installed_app, home)
             assert installed_app.stat().st_ino == app_inode
             assert pids() == initial_pids and (token.stat().st_ino, token.read_bytes()) == identity
-            assert json.loads(run(cli, "host", "status", env=env))["phase"] == "synced"
+            # The active watcher may already be running its next pass.
+            retry(lambda: json.loads(run(cli, "host", "status", env=env))["phase"] == "synced")
             print("PASS durable signed app reopened after deleting the download, persistent launchd peer/watcher, automatic upload and download, repeat install with stable credentials and PIDs")
 
             if legacy_payload:
