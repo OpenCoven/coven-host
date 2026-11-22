@@ -17,7 +17,7 @@ COVEN_SIGN_IDENTITY="$CERTIFICATE_FINGERPRINT" COVEN_NOTARY_PROFILE="$KEYCHAIN_P
 
 The notarized build waits for Apple, staples the ticket to the app, archives the app with its metadata, and validates the staple and Gatekeeper assessment after extracting the final ZIP. Omitting the notary profile builds a signed candidate for qualification. Omitting both signing variables creates a local ad-hoc test build. Distribution requires testing the exact final downloaded ZIP. Timestamped signatures and service-issued tickets are time dependent.
 
-The universal GUI targets macOS 11.0 on Intel and Apple silicon. The arm64 CLI load command specifies macOS 11.0 and the Intel CLI load command specifies macOS 10.12. The combined app requires macOS 11.0 or later.
+Build both CLI slices with `MACOSX_DEPLOYMENT_TARGET=11.0` to match the universal GUI. Inspect each final executable with `xcrun vtool -show-build` and record its minimum OS before distributing the archive.
 
 ## Verify
 

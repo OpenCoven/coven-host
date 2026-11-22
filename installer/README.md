@@ -11,7 +11,7 @@ Start with the [release installation guide](../docs/setup.md) for user-visible b
 
 ## Linux release inputs
 
-Use binaries from the reviewed Coven manifest and lockfile. Record the SHA-256 of each executable during its installed qualification. Supply the matching Coven checkout’s LICENSE. The builder verifies the executable hash and ELF architecture and records its glibc requirement.
+Use binaries from the reviewed Coven manifest and lockfile. Record the SHA-256 of each executable during its installed qualification. Supply the matching Coven checkout’s LICENSE. The builder verifies the executable hash and ELF architecture and records its glibc requirement. The v0.1.1 distribution supports glibc 2.34. For v0.1.2, build both native binaries against that floor and check the `glibc` field in each portable archive’s `Coven Host/platform.json`. Building on a newer workstation can raise the minimum even if its local tests pass.
 
 ```sh
 python3 installer/linux/build.py --arch amd64 --native "$X64_CLI" --sha256 "$X64_SHA256" --coven-license "$COVEN_LICENSE" --out "$OUTPUT"
