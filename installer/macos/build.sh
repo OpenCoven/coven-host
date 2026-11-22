@@ -19,7 +19,7 @@ check() {
   [[ "$(shasum -a 256 "$1" | cut -d' ' -f1)" == "$2" ]] || { echo "Payload integrity check failed" >&2; exit 1; }
 }
 check "$1" "$2"
-/usr/bin/lipo -verify_arch arm64 "$1"
+/usr/bin/lipo "$1" -verify_arch arm64
 cp "$1" "$helpers/coven-arm64"
 cp "$3" "$res/LICENSE"
 cp "$src/../../LICENSE" "$res/LICENSE-COVEN-HOST"
@@ -28,7 +28,7 @@ cp "$src/Info.plist" "$p"
 archs=(arm64)
 if [[ $# == 6 ]]; then
   check "$5" "$6"
-  /usr/bin/lipo -verify_arch x86_64 "$5"
+  /usr/bin/lipo "$5" -verify_arch x86_64
   cp "$5" "$helpers/coven-x86_64"
   archs+=(x86_64)
 fi
