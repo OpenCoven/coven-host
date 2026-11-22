@@ -2,6 +2,14 @@
 
 Use a Coven CLI and daemon built with the `hostSync` capability. The [acceptance report](acceptance.md) identifies the tested build. The following commands use a Unix client and a Linux peer. On Windows, use the same CLI commands with local absolute paths and an owner-only ACL on the token. Keep private client state and the synchronized folder in separate directories on the same volume.
 
+## Recover a deletion or rename
+
+The v0.1.1 desktop release preserves a missing synchronized file on the peer for operator attention. The 0.1.2 candidate negotiates deletion support between the native client and peer. When an editor renames a file offline, the next sync can publish its new path and retire the old path in separate operations. After an interrupted connection, reconnect and run `coven host sync` to finish. [Release status](plan.md#offline-deletion-and-rename-release)
+
+If one side deletes a file and the other side edits it, run `coven host status`. The conflict entry identifies the deleted side, peer revision and recovery path for the surviving edit. Copy the recovered bytes if needed. Choose the outcome with `coven host resolve files/note.md --local` or `coven host resolve files/note.md --remote`, then run `coven host sync`. Selecting the deleted side removes the file at the synchronized path. If both copies have since been deleted, the next sync clears the conflict and keeps the previously reported recovery file.
+
+If another Castle folder renames a file while this one is offline, reconnect and let the watcher finish. The new path contains the synchronized bytes. For a previously synchronized file removed at its old path, run `coven host status` and inspect the matching entry in `previousVersions` to find the displaced local copy.
+
 ## Connect through SSH
 
 Install the host-capable CLI on both systems. Verify the remote SSH host key against a trusted fingerprint and add it to the client’s known hosts. On the client, substitute your SSH destination below. This setup uses OpenSSL to create a matching token pair outside the folder and refuses to overwrite either token. Reuse an existing matching pair on subsequent starts.

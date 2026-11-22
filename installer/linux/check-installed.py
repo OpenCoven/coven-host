@@ -37,6 +37,9 @@ def main():
     assert pwd.getpwuid(os.getuid()).pw_name == args.disposable_account
     home = Path.home()
     assert home == Path(pwd.getpwuid(os.getuid()).pw_dir)
+    # A sudo-launched runner can retain the parent account's XDG paths.
+    # Model the login environment of the disposable account on this volume.
+    os.environ.update(XDG_CONFIG_HOME=str(home / ".config"), XDG_DATA_HOME=str(home / ".local/share"))
     state = home / ".local/state/coven-host-desktop"
     root = home / "Coven"
     app = args.app
