@@ -1,0 +1,51 @@
+name: Installed Windows desktop deletion qualification
+on:
+  push:
+    branches: [qualification/5-desktop]
+    paths: [.github/workflows/desktop-windows-qualification.yml, tests/windows/**, tests/installed_deletion.py, installer/windows/**]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  desktop:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: OpenCoven/coven
+          ref: 6855b5a4b0b26f08bd711d302ffc8534b27ebea2
+          sparse-checkout: LICENSE
+          sparse-checkout-cone-mode: false
+          path: consumer
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          run-id: 44998995286
+          artifact-ids: 14745576289
+          github-token: ${{ github.token }}
+          path: packages
+      - name: Build the native desktop installer around the retained qualification binary
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem packages -Recurse -Filter '*cli-windows-*.tgz')
+          if ($packages.Count -ne 1) { throw 'Expected the qualified x64 native package' }
+          & ./installer/windows/build.ps1 -Package $packages[0].FullName -OutputDirectory assets -CovenLicense consumer/LICENSE -PackageSha256 39eb7168dd6fcaedbdcf88b225858bea04b4ac54b41a4d3b672e7b179e6d83ad -CliSha256 bee722f49bfbcb9e24adbeb9cb793c2cbfe67d110680eaf217833f2fdb1e91bb
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-x64-installer
+          path: assets/*.exe
+          if-no-files-found: error
+          retention-days: 14
+      - name: Install as a standard user on native Windows x64 and NTFS
+        shell: powershell
+        run: |
+          $arch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+          $volume = Get-Volume -DriveLetter ($env:SystemDrive[0])
+          if ("$arch" -ne 'X64' -or $volume.FileSystem -ne 'NTFS') { throw 'Windows x64 and NTFS required' }
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, BuildNumber, OSArchitecture
+          Write-Output "Hosted VM, native $arch, $($volume.FileSystem)"
+          ./tests/windows/run-as-standard-user.ps1 (Resolve-Path assets/*.exe)
