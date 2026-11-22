@@ -49,7 +49,7 @@ jobs:
           Get-CimInstance Win32_OperatingSystem | Select-Object Caption, BuildNumber, OSArchitecture
           Write-Output "Hosted VM, native $arch, $($volume.FileSystem)"
           ./tests/windows/run-as-standard-user.ps1 (Resolve-Path assets/*.exe)
-      - name: Upgrade the released Windows installation with its original folder
+      - name: Download and verify the previous Windows installer
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
@@ -57,5 +57,7 @@ jobs:
           gh release download v0.1.1 --repo OpenCoven/coven-host --pattern 'Coven-Host-0.1.1-Windows-x64.exe' -D previous
           $previous = (Resolve-Path previous/*.exe).Path
           if ((Get-FileHash $previous).Hash -ne 'FA5B2D763805ED73BD82130654E3456596AC26388BD762400916CAD92CD655A2') { throw 'Previous release digest mismatch' }
-          & powershell.exe -NoProfile -File ./tests/windows/run-as-standard-user.ps1 -Installer (Resolve-Path assets/*.exe).Path -PreviousInstaller $previous
-          if ($LASTEXITCODE) { throw 'The existing-profile upgrade failed' }
+      - name: Upgrade the previous Windows installation in its own standard account
+        shell: powershell
+        run: |
+          ./tests/windows/run-as-standard-user.ps1 -Installer (Resolve-Path assets/*.exe).Path -PreviousInstaller (Resolve-Path previous/*.exe).Path
