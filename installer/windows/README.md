@@ -4,19 +4,19 @@ Open the Windows x64 EXE from the private release. Windows 11 on ARM64 can run i
 
 Open **Coven Host** in Start to check sync or restart stopped processes. The application reuses the configured folder, peer, access token and database. A fresh configuration uses a private peer on an available IPv4 loopback port. To synchronize with another machine, follow the [SSH instructions](../../docs/operations.md#connect-through-ssh) with the installed CLI. A subsequent launch recognizes an existing configured remote. Setup registers a sign-in entry named **OpenCovenHost**. Windows Startup Apps settings control whether it runs at login.
 
-The versioned executables and license texts live in `%LOCALAPPDATA%\OpenCoven\Coven Host\0.1.1`. The sibling `local-peer` directory holds the token, port, process records and peer database. The token inherits an ACL granting access only to the current user. The production daemon manages its existing profile, folder state and peer identity pin. Keep backups of the peer and client state with their respective processes stopped, as described in the [operator guide](../../docs/operations.md).
+The versioned executables and license texts live in `%LOCALAPPDATA%\OpenCoven\Coven Host\0.1.2`. The sibling `local-peer` directory holds the token, port, process records and peer database. The token inherits an ACL granting access only to the current user. The production daemon manages its existing profile, folder state and peer identity pin. Keep backups of the peer and client state with their respective processes stopped, as described in the [operator guide](../../docs/operations.md).
 
 If setup reports a problem, follow the next step in the window. **Copy report** copies the displayed diagnostic. **Save report** exports it to a text file. You can also select the text and press Ctrl+C. **Retry** checks the same installation again. Diagnostic reports include the release, UTC time, Windows build, native architecture, stage, stable code and a bounded observation. The reporter excludes command output, remote addresses, account and folder names, document contents, and token values. Windows security prompts that appear before the application opens are controlled by Windows.
 
 ## Build
 
-Use a Windows 11 build machine with its inbox Windows PowerShell, .NET Framework 4.x compiler and tar.exe. Supply the original Windows package from the private v0.1.0 release. In a PowerShell session authorized to run your reviewed build sources, run the build from this directory.
+Use a Windows 11 build machine with its inbox Windows PowerShell, .NET Framework 4.x compiler and tar.exe. Supply the Windows x64 CLI package built from the reviewed consumer SHA. Take the archive and executable SHA-256 values from its installed qualification receipt. In a PowerShell session authorized to run your reviewed build sources, run the build from this directory.
 
 ```powershell
-.\build.ps1 -Package C:\release-inputs\opencoven-cli-windows-0.1.0-host.1.tgz -OutputDirectory C:\release-output
+.\build.ps1 -Package $Package -OutputDirectory $OutputDirectory -PackageSha256 $ArchiveHash -CliSha256 $ExecutableHash
 ```
 
-The build verifies both the source archive and the extracted executable against fixed SHA-256 digests. It embeds the compressed executable and both licenses in `Coven-Host-0.1.1-Windows-x64.exe`. The installer verifies the executable digest before installing it and at setup or sign-in. The .NET Framework compiler adds build-specific PE metadata. Record the SHA-256 of the final distributable after any authorized signing. The build command produces an unsigned EXE.
+The build verifies both the source archive and the extracted executable against the supplied qualification digests. It embeds the compressed executable and both licenses in `Coven-Host-0.1.2-Windows-x64.exe`. The installer verifies the executable digest before installing it and at setup or sign-in. The .NET Framework compiler adds build-specific PE metadata. Record the SHA-256 of the final distributable after any authorized signing. The build command produces an unsigned EXE.
 
 If Windows or organizational policy blocks the download or launch, record the message and use the release's support instructions. Organizations requiring an Authenticode publisher signature need a publisher-signed Windows release.
 

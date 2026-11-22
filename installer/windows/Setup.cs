@@ -23,8 +23,8 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Coven Host")]
 [assembly: AssemblyCompany("OpenCoven")]
-[assembly: AssemblyVersion("0.1.1.0")]
-[assembly: AssemblyFileVersion("0.1.1.0")]
+[assembly: AssemblyVersion("0.1.2.0")]
+[assembly: AssemblyFileVersion("0.1.2.0")]
 
 internal sealed class SetupFailure : Exception
 {
@@ -35,8 +35,7 @@ internal sealed class SetupFailure : Exception
 
 internal sealed class Setup
 {
-    internal const string Version = "0.1.1";
-    const string CliHash = "1e7a6e20030d01492e60607ec7b9916a26b4bdbc4ccc2c1594877fd50c5786cf";
+    internal const string Version = "0.1.2";
     readonly string app = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenCoven", "Coven Host");
     internal string Root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Coven");
     internal string Report { get; private set; }
@@ -171,10 +170,10 @@ internal sealed class Setup
                 using (var src = Assembly.GetExecutingAssembly().GetManifestResourceStream("cli.gz"))
                 using (var zip = new GZipStream(src, CompressionMode.Decompress))
                 using (var dst = File.Create(temp)) zip.CopyTo(dst);
-                if (Hash(temp) != CliHash) Fail("The embedded CLI did not match its release hash.");
+                if (Hash(temp) != QualifiedPayload.Sha256) Fail("The embedded CLI did not match its release hash.");
             }, false);
         }
-        if (Hash(Cli) != CliHash)
+        if (Hash(Cli) != QualifiedPayload.Sha256)
             Fail("The installed CLI has an unexpected SHA-256. Move the versioned application directory aside after closing its processes, then reopen the installer.");
         string self = Assembly.GetExecutingAssembly().Location;
         Ordinary(Launcher);
@@ -450,7 +449,7 @@ internal sealed class Setup
         else
         {
             Step("CH-W02", "Verify installed application", "Run the release installer again to restore a missing CLI. If an installed binary was modified, verify the release checksum before replacing it.");
-            if (!File.Exists(Cli) || Hash(Cli) != CliHash) Fail("The installed CLI is missing or damaged.");
+            if (!File.Exists(Cli) || Hash(Cli) != QualifiedPayload.Sha256) Fail("The installed CLI is missing or damaged.");
         }
         Step("CH-W03", "Check folder configuration", "Open your existing Coven application and check daemon availability. Verify that your configured folder and state are accessible, then select Retry.");
         var status = Status();
