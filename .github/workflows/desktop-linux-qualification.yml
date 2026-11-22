@@ -2,9 +2,10 @@ name: Installed Linux desktop deletion qualification
 on:
   push:
     branches: [qualification/5-desktop]
-    paths: [.github/workflows/desktop-linux-qualification.yml]
+    paths: [.github/workflows/desktop-linux-qualification.yml, installer/linux/**]
 permissions:
   contents: read
+  actions: read
 jobs:
   desktop:
     strategy:
@@ -13,8 +14,12 @@ jobs:
         include:
           - runner: ubuntu-24.04
             arch: amd64
+            artifact: 14744859464
+            sha: e60445e127bf5ad8b4019f5602446adb62042080529089adf7dcb302a6a7db1a
           - runner: ubuntu-24.04-arm
             arch: arm64
+            artifact: 14745692202
+            sha: 62dfdc582f1835446eca37800f1722eb98322b6380226c91cd92925e10b7a3eb
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 75
     steps:
@@ -27,20 +32,19 @@ jobs:
           ref: 6855b5a4b0b26f08bd711d302ffc8534b27ebea2
           path: consumer
           persist-credentials: false
-      - name: Verify candidate source and build the native CLI
-        working-directory: consumer
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          run-id: 45000242079
+          artifact-ids: ${{ matrix.artifact }}
+          github-token: ${{ github.token }}
+          path: retained
+      - name: Package the native executable from the immutable qualification run
         run: |
           test "$(dpkg --print-architecture)" = "${{ matrix.arch }}"
-          sed -i 's/65927dd5e64d732cb99926bed66492994acdcec5/22f802e76e0c944707bb0dd3b14716916c091f95/g' crates/coven-cli/Cargo.toml Cargo.lock
-          git add crates/coven-cli/Cargo.toml Cargo.lock
-          test "$(git write-tree)" = d30e4742a9e3fbca2c03f96a4697dfe895687e60
-          COVEN_BUILD_VERSION=v0.1.2-qualification.24 cargo build --locked --release -p coven-cli
-      - name: Qualify executable and install Debian package
-        run: |
-          native="$PWD/consumer/target/release/coven"
-          sha256sum "$native"
-          python3 tests/installed_deletion.py "$native"
-          python3 installer/linux/build.py --arch "${{ matrix.arch }}" --native "$native" --sha256 "$(sha256sum "$native" | cut -d' ' -f1)" --coven-license consumer/LICENSE --out assets
+          deb=$(find retained -name '*.deb' -type f)
+          dpkg-deb -x "$deb" extracted
+          native="$PWD/extracted/usr/lib/coven-host-desktop/coven"
+          python3 installer/linux/build.py --arch "${{ matrix.arch }}" --native "$native" --sha256 "${{ matrix.sha }}" --coven-license consumer/LICENSE --out assets
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: desktop-linux-${{ matrix.arch }}
