@@ -43,6 +43,7 @@ internal sealed class Setup
     string Bin { get { return Path.Combine(app, Version); } }
     string Launcher { get { return Path.Combine(Bin, "Coven Host.exe"); } }
     string Cli { get { return Path.Combine(Bin, "coven.exe"); } }
+    string PreviousCli { get { return Path.Combine(app, "0.1.1", "coven.exe"); } }
     string State { get { return Path.Combine(app, "local-peer"); } }
     string Token { get { return Path.Combine(State, "access.token"); } }
     string Server { get { return Path.Combine(State, "server"); } }
@@ -305,6 +306,12 @@ internal sealed class Setup
     {
         var result = ReadDaemonStatus();
         if (result.Exit != 0 && result.Error.Contains("client is not initialized")) return null;
+        if (result.Exit != 0 && result.Error.Contains("Castle ownership is unverified") && File.Exists(PortFile) && Directory.Exists(Root))
+        {
+            // Native init verifies the original configured root before claiming a historical profile.
+            Success(RunCli("host", "init", "--root", Root));
+            result = ReadDaemonStatus();
+        }
         Success(result);
         var status = new JavaScriptSerializer { MaxJsonLength = 32 * 1024 * 1024 }.Deserialize<Dictionary<string, object>>(result.Output);
         if (status == null || !status.ContainsKey("remote") || !(status["root"] is string))
@@ -378,7 +385,7 @@ internal sealed class Setup
         throw new IOException("Cannot size TCP listener table");
     }
 
-    Process Recorded(string role)
+    Process Recorded(string role, string executable = null)
     {
         var path = Path.Combine(State, role + ".pid");
         Ordinary(path);
@@ -390,7 +397,7 @@ internal sealed class Setup
         try { p = Process.GetProcessById(pid); } catch (ArgumentException) { return null; }
         try
         {
-            if (p.StartTime.ToUniversalTime().Ticks == started && String.Equals(p.MainModule.FileName, Cli, StringComparison.OrdinalIgnoreCase)) return p;
+            if (p.StartTime.ToUniversalTime().Ticks == started && String.Equals(p.MainModule.FileName, executable ?? Cli, StringComparison.OrdinalIgnoreCase)) return p;
         }
         catch (InvalidOperationException) { }
         catch (System.ComponentModel.Win32Exception) { }
@@ -450,6 +457,18 @@ internal sealed class Setup
         {
             Step("CH-W02", "Verify installed application", "Run the release installer again to restore a missing CLI. If an installed binary was modified, verify the release checksum before replacing it.");
             if (!File.Exists(Cli) || Hash(Cli) != QualifiedPayload.Sha256) Fail("The installed CLI is missing or damaged.");
+        }
+        if (File.Exists(PreviousCli) && File.Exists(PortFile))
+        {
+            using (var previousPeer = Recorded("peer", PreviousCli))
+            using (var previousWatcher = Recorded("watch", PreviousCli))
+            {
+                if (previousPeer != null || previousWatcher != null)
+                {
+                    Step("CH-W11", "Finish the version upgrade", "Save your work, sign out of Windows and sign back in. Coven Host will resume with the same folder and peer.");
+                    Fail("The earlier Coven Host login session is still running. The new installer is registered for your next sign-in.");
+                }
+            }
         }
         Step("CH-W03", "Check folder configuration", "Open your existing Coven application and check daemon availability. Verify that your configured folder and state are accessible, then select Retry.");
         var status = Status();
