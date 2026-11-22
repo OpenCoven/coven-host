@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: e63875b6cb24f94914ec97e7dbd42bcb8884ec36
+          ref: 08c24f9bcb0492199ddef50485d3a679df6818b6
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -26,14 +26,16 @@ jobs:
         shell: bash
         run: |
           set -eu
-          test "$(git write-tree)" = 1a7978ff82e5a4e39d65f0274c13e5d4b32e380e
-          grep -F 247904def96591b7f473a6e9a98ec8363b925da0 crates/coven-cli/Cargo.toml Cargo.lock
+          sed -i 's/247904def96591b7f473a6e9a98ec8363b925da0/c39e4474be545ae64fdb6bc88bcfa7e3443286be/g' crates/coven-cli/Cargo.toml Cargo.lock
+          git add crates/coven-cli/Cargo.toml Cargo.lock
+          test "$(git write-tree)" = 5844d2c3a22e2622aa59ec05ca011aad938e6306
+          grep -F c39e4474be545ae64fdb6bc88bcfa7e3443286be crates/coven-cli/Cargo.toml Cargo.lock
       - name: Build and pack the native CLI and npm wrapper
         working-directory: consumer
         shell: bash
         run: |
           set -eu
-          export COVEN_BUILD_VERSION=v0.1.2 COVEN_NPM_VERSION=0.1.2 COVEN_BUILD_COMMIT=8fb558c60b006b337bf7850e6e43e0793b788097
+          export COVEN_BUILD_VERSION=v0.1.2-review.2 COVEN_NPM_VERSION=0.1.2-review.2
           cargo build --release --locked -p coven-cli --target x86_64-pc-windows-msvc
           node scripts/publish-npm.mjs --target=windows --skip-build --dry-run
           mkdir packages-for-test
