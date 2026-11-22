@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: OpenCoven/coven
-          ref: 29bb4f964f257d3f1cf8a3e2e32ab5657f65dd3b
+          ref: 9e14f365e07e57892920d9fed31bbbf9b257b66c
           path: consumer
           persist-credentials: false
       - name: Verify immutable consumer source and resolved Host pin
@@ -26,8 +26,6 @@ jobs:
         shell: bash
         run: |
           set -eu
-          cargo update -p url --precise 2.5.9
-          git add Cargo.lock
           test "$(git write-tree)" = b9abc86bc525195f7fd318c2cc8edae0b9d60e41
           grep -F c39e4474be545ae64fdb6bc88bcfa7e3443286be crates/coven-cli/Cargo.toml Cargo.lock
       - name: Build and pack the native CLI and npm wrapper
@@ -35,7 +33,7 @@ jobs:
         shell: bash
         run: |
           set -eu
-          export COVEN_BUILD_VERSION=v0.1.2-review.3 COVEN_NPM_VERSION=0.1.2-review.3
+          export COVEN_BUILD_VERSION=v0.1.2 COVEN_BUILD_COMMIT=9e14f365e07e57892920d9fed31bbbf9b257b66c COVEN_NPM_VERSION=0.1.2
           cargo build --release --locked -p coven-cli --target x86_64-pc-windows-msvc
           node scripts/publish-npm.mjs --target=windows --skip-build --dry-run
           mkdir packages-for-test

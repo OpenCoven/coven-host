@@ -17,17 +17,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: OpenCoven/coven
-          ref: 29bb4f964f257d3f1cf8a3e2e32ab5657f65dd3b
+          ref: 9e14f365e07e57892920d9fed31bbbf9b257b66c
           path: consumer
           persist-credentials: false
       - name: Compile the exact candidate for both Mac architectures
         working-directory: consumer
         run: |
-          cargo update -p url --precise 2.5.9
-          git add Cargo.lock
           test "$(git write-tree)" = b9abc86bc525195f7fd318c2cc8edae0b9d60e41
           rustup target add x86_64-apple-darwin aarch64-apple-darwin
-          export MACOSX_DEPLOYMENT_TARGET=11.0 COVEN_BUILD_VERSION=v0.1.2-review.3
+          export MACOSX_DEPLOYMENT_TARGET=11.0 COVEN_BUILD_VERSION=v0.1.2 COVEN_BUILD_COMMIT=9e14f365e07e57892920d9fed31bbbf9b257b66c
           cargo build --release --locked -p coven-cli --target aarch64-apple-darwin --target x86_64-apple-darwin
       - name: Stage and qualify the two native payloads
         run: |
