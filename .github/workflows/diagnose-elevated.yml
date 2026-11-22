@@ -1,0 +1,29 @@
+name: Inspect the elevated profile using the prior Windows control
+on:
+  push:
+    branches: [qualification/5-desktop]
+    paths: [.github/workflows/diagnose-elevated.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  observe:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          run-id: 44998995286
+          artifact-ids: 14745576289
+          github-token: ${{ github.token }}
+          path: packages
+      - shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem packages -Recurse -Filter '*cli-windows-*.tgz')
+          if ($packages.Count -ne 1 -or (Get-FileHash $packages[0].FullName).Hash -ne '39eb7168dd6fcaedbdcf88b225858bea04b4ac54b41a4d3b672e7b179e6d83ad') { throw 'Windows control missing' }
+          tar xf $packages[0].FullName package/bin/coven.exe
+          if ((Get-FileHash package/bin/coven.exe).Hash -ne 'bee722f49bfbcb9e24adbeb9cb793c2cbfe67d110680eaf217833f2fdb1e91bb') { throw 'Incorrect control binary' }
+          python tests/installed_deletion.py (Resolve-Path package/bin/coven.exe)
