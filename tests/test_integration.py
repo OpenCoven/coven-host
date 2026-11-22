@@ -1,3 +1,4 @@
+import sqlite3
 import contextlib
 from hashlib import sha256
 import http.client
@@ -385,6 +386,45 @@ class Integration(unittest.TestCase):
         self.assertEqual(self.request("GET", PREFIX + "/files/note.md")[0], 404)
 
     @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
+    def test_full_deletion_archive_preserves_peer_and_unrelated_sync(self):
+        path = self.castle / "files/keep.md"
+        path.write_bytes(b"before")
+        self.run_cli("sync")
+        self.stop_host()
+        with contextlib.closing(sqlite3.connect(self.work / "server/host.sqlite")) as db:
+            db.executemany("INSERT INTO deleted_versions VALUES ('files/history.md',?,?,?,?)",
+                           ((2 * n, sha256(b"a").hexdigest(), b"a", f"{n:032x}") for n in range(1, 2001)))
+            db.commit()
+        self.start_host()
+        path.unlink()
+        unrelated = self.castle / "files/other.md"
+        unrelated.write_bytes(b"independent")
+        self.run_cli("sync", code=1)
+        self.assert_remote("files/keep.md", b"before", 1)
+        self.assert_remote("files/other.md", b"independent", 1)
+        path.write_bytes(b"before")
+        self.run_cli("sync")
+        self.assert_remote("files/keep.md", b"before", 1)
+
+    @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
+    def test_conflict_resolution_at_file_limit_preserves_recovery(self):
+        key = "files/missing.md"
+        path = self.castle / key
+        path.write_bytes(b"baseline")
+        self.run_cli("sync")
+        path.unlink()
+        self.publish(key, b"edited on peer")
+        self.run_cli("sync", code=1)
+        for n in range(1000):
+            (self.castle / f"files/filler-{n}").touch()
+        self.assertIn(b"storage limits", self.run_cli("resolve", key, "--remote", code=1))
+        self.assertFalse(path.exists())
+        self.assertTrue(any(p.read_bytes() == b"edited on peer" for p in (self.work / "client/recovery").iterdir()))
+        (self.castle / "files/filler-0").unlink()
+        self.run_cli("resolve", key, "--remote")
+        self.assertEqual(path.read_bytes(), b"edited on peer")
+
+    @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
     def test_deleted_path_rejects_peer_rollback(self):
         local = self.castle / "files/note.md"
         local.write_bytes(b"before deletion")
@@ -433,6 +473,41 @@ class Integration(unittest.TestCase):
                         self.assert_remote(key, edit, 3 if deleted == "remote" else 2)
                     copies = (self.work / "client/recovery").glob("*-" + sha256(edit).hexdigest())
                     self.assertIn(edit, [copy.read_bytes() for copy in copies])
+
+    @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
+    def test_conflicting_edit_then_both_sides_delete(self):
+        self.check_both_sides_deleted(prior_partial_sync=False)
+
+    @unittest.skipUnless(os.environ.get("COVEN_TEST_NATIVE"), "requires deletion-capable Rust endpoints")
+    def test_conflicting_edit_after_partial_deletion_sync(self):
+        self.check_both_sides_deleted(prior_partial_sync=True)
+
+    def check_both_sides_deleted(self, prior_partial_sync):
+        key = "files/partial.md" if prior_partial_sync else "files/current.md"
+        local = self.castle / key
+        edit = b"edited while offline"
+        self.publish(key, b"base")
+        self.run_cli("sync")
+        local.write_bytes(edit)
+        headers = {"X-Host-ID": self.inventory()["host"], "If-Match": '"1"',
+                   "X-Sync-Operation": secrets.token_hex(16)}
+        self.assertEqual(self.request("DELETE", PREFIX + "/" + key, headers)[0], 200)
+        self.assertIn(b"unresolved conflicts", self.run_cli("sync", code=1))
+        status = json.loads(self.run_cli("status").splitlines()[-1])
+        recovered = Path(status["conflicts"][0]["local"])
+        self.assertEqual(recovered.read_bytes(), edit)
+        local.unlink()
+        if prior_partial_sync:
+            # The previous candidate recorded the deletion but left its conflict behind.
+            with contextlib.closing(sqlite3.connect(self.work / "client/client.sqlite")) as db:
+                db.execute("DELETE FROM baseline WHERE path=?", (key,))
+                db.execute("INSERT INTO deleted_baseline VALUES (?,2)", (key,))
+                db.commit()
+        self.run_cli("sync")
+        self.assertIn(b"Conflicts: 0", self.run_cli("status"))
+        self.assertFalse(local.exists())
+        self.assertEqual(self.request("GET", PREFIX + "/" + key)[0], 404)
+        self.assertEqual(recovered.read_bytes(), edit)
 
     def test_exclusions_local_limit_and_deletion_boundary(self):
         files = self.castle / "files"

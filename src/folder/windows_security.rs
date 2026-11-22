@@ -98,6 +98,9 @@ fn private_descriptor() -> Result<Local> {
 }
 
 pub(super) fn protect(file: &File) -> Result<()> {
+    // Tightening a DACL changes the source document even if the later move fails.
+    // Verify ownership on this same handle before changing its permissions.
+    check_access(file, false)?;
     let descriptor = private_descriptor()?;
     if unsafe {
         SetKernelObjectSecurity(
@@ -130,6 +133,10 @@ pub(super) fn mkdir(path: &Path) -> Result<()> {
 }
 
 pub(in crate::folder) fn check_private(file: &File) -> Result<()> {
+    check_access(file, true)
+}
+
+fn check_access(file: &File, require_private_acl: bool) -> Result<()> {
     let user = User::current()?;
     let (mut owner, mut acl, mut descriptor) = (null_mut(), null_mut(), null_mut());
     let result = unsafe {
@@ -152,6 +159,9 @@ pub(in crate::folder) fn check_private(file: &File) -> Result<()> {
         !owner.is_null() && unsafe { EqualSid(owner, user.sid()) } != 0,
         "private file or directory must be owned by the current user"
     );
+    if !require_private_acl {
+        return Ok(());
+    }
     ensure!(
         !acl.is_null() && unsafe { IsValidAcl(acl) } != 0,
         "a private Windows DACL is required"
@@ -184,4 +194,64 @@ pub(in crate::folder) fn check_private(file: &File) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::windows::fs::OpenOptionsExt;
+    use windows_sys::Win32::Storage::FileSystem::{READ_CONTROL, WRITE_DAC};
+
+    #[test]
+    fn refusing_a_group_owned_file_preserves_its_permissions() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("document.txt");
+        std::fs::write(&path, b"original")?;
+        // An elevated Windows token can assign the Administrators group as the
+        // default owner. Ordinary per-user sessions exercise the positive path.
+        let file = File::options()
+            .access_mode(READ_CONTROL | WRITE_DAC)
+            .open(&path)?;
+        let observe = || -> Result<Option<Vec<u8>>> {
+            let (mut owner, mut acl, mut descriptor) = (null_mut(), null_mut(), null_mut());
+            let result = unsafe {
+                GetSecurityInfo(
+                    file.as_raw_handle(),
+                    SE_FILE_OBJECT,
+                    OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                    &mut owner,
+                    null_mut(),
+                    &mut acl,
+                    null_mut(),
+                    &mut descriptor,
+                )
+            };
+            if result != ERROR_SUCCESS {
+                return Err(io::Error::from_raw_os_error(result as i32).into());
+            }
+            let _hold = Local(descriptor);
+            ensure!(!owner.is_null() && !acl.is_null() && unsafe { IsValidAcl(acl) } != 0);
+            if unsafe { EqualSid(owner, User::current()?.sid()) } != 0 {
+                return Ok(None);
+            }
+            // GetSecurityInfo keeps the complete ACL in the descriptor until LocalFree.
+            Ok(Some(
+                unsafe {
+                    std::slice::from_raw_parts(acl.cast::<u8>(), usize::from((*acl).AclSize))
+                }
+                .to_vec(),
+            ))
+        };
+        let Some(before) = observe()? else {
+            return Ok(());
+        };
+        let error = protect(&file).expect_err("group-owned document must be refused");
+        ensure!(error.to_string().contains("owned by the current user"));
+        ensure!(
+            observe()? == Some(before),
+            "refusal changed the document ACL"
+        );
+        ensure!(std::fs::read(&path)? == b"original");
+        Ok(())
+    }
 }

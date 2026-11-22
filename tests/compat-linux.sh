@@ -25,7 +25,11 @@ if [[ ${1:-} == --deletions && $# == 1 ]]; then
         test_integration.Integration.test_offline_rename_after_peer_restart \
         test_integration.Integration.test_peer_rename_retains_displaced_local_file_after_restart \
         test_integration.Integration.test_delete_edit_conflict_resolves_either_side \
+        test_integration.Integration.test_conflicting_edit_then_both_sides_delete \
+        test_integration.Integration.test_conflicting_edit_after_partial_deletion_sync \
         test_integration.Integration.test_delete_retry_after_lost_ack_and_restart \
+        test_integration.Integration.test_conflict_resolution_at_file_limit_preserves_recovery \
+        test_integration.Integration.test_full_deletion_archive_preserves_peer_and_unrelated_sync \
         test_integration.Integration.test_deleted_path_rejects_peer_rollback
     exit
 fi
