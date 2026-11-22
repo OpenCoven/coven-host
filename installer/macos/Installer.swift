@@ -49,7 +49,7 @@ struct SetupFailure: Error {
     var report: String {
         let os = ProcessInfo.processInfo.operatingSystemVersion
         return [
-            "Coven Host installer 0.1.1", "Platform: macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion), \(architecture)",
+            "Coven Host installer 0.1.2", "Platform: macOS \(os.majorVersion).\(os.minorVersion).\(os.patchVersion), \(architecture)",
             "UTC time: " + ISO8601DateFormatter().string(from: date), "Stage: " + stage.rawValue,
             "Code: " + code, "Expected: " + stage.expected, "Observed: " + observed,
             "Error classification: " + classification, "Reproduction: Open the Coven Host installer while signed in to this Mac.",
@@ -103,7 +103,7 @@ private func directories(_ dir: URL, under home: URL, privateOnly: Bool = false)
 }
 
 // A fully written file becomes visible only after the exclusive same-directory rename.
-private func publish(_ data: Data, at path: URL, mode: mode_t = 0o600) throws {
+private func publish(_ data: Data, at path: URL, mode: mode_t = 0o600, replacing: Bool = false) throws {
     let temp = path.deletingLastPathComponent().appendingPathComponent(".setup-" + UUID().uuidString)
     let fd = open(temp.path, O_CREAT | O_EXCL | O_NOFOLLOW | O_WRONLY, mode)
     guard fd >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
@@ -112,7 +112,7 @@ private func publish(_ data: Data, at path: URL, mode: mode_t = 0o600) throws {
     try stream.write(contentsOf: data)
     try stream.synchronize()
     try stream.close()
-    guard renamex_np(temp.path, path.path, UInt32(RENAME_EXCL)) == 0 else {
+    guard renamex_np(temp.path, path.path, UInt32(replacing ? RENAME_SWAP : RENAME_EXCL)) == 0 else {
         throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
     }
 }
@@ -276,7 +276,18 @@ final class Installer {
         let copy = staging.appendingPathComponent("Coven Host.app")
         for name in destinationNames {
             let destination = applications.appendingPathComponent(name)
-            if try info(destination) == nil {
+            let installed = try info(destination)
+            let mode = installed?.st_mode ?? 0
+            let priorApp = mode & S_IFMT == S_IFDIR && installed?.st_uid == getuid()
+                && Bundle(url: destination)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String == "0.1.1"
+            let replace: Bool
+            if priorApp {
+                let requirement = "=identifier \"org.opencoven.coven-host.installer\" and anchor apple generic and certificate leaf[subject.OU] = \"9LR8Z8UQ9X\""
+                replace = try run("/usr/bin/codesign", ["--verify", "--all-architectures", "--deep", "--strict", "-R", requirement, destination.path], env: env).status == 0
+            } else {
+                replace = false
+            }
+            if installed == nil || replace {
                 if !staged {
                     try fm.createDirectory(at: staging, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
                     staged = true
@@ -285,7 +296,7 @@ final class Installer {
                         throw SetupFailure(stage, "APP-COPY", "The copied application did not pass signature verification.", "Check free disk space and download a fresh copy of Coven Host.", "Copied bundle signature")
                     }
                 }
-                if renamex_np(copy.path, destination.path, UInt32(RENAME_EXCL)) == 0 { return }
+                if renamex_np(copy.path, destination.path, UInt32(replace ? RENAME_SWAP : RENAME_EXCL)) == 0 { return }
                 if errno != EEXIST { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
             }
             if let item = try info(destination), item.st_mode & S_IFMT == S_IFDIR, item.st_uid == getuid(),
@@ -318,12 +329,12 @@ final class Installer {
         let previousWatch = try readJob("watch")
         let marker = state.appendingPathComponent("installer-port")
         let oldBinary = support.appendingPathComponent("releases/v0.1.0/node_modules/@opencoven/cli-macos/bin/coven")
-        let newBinary = support.appendingPathComponent("releases/v0.1.1/bin/coven")
+        let previousBinary = support.appendingPathComponent("releases/v0.1.1/bin/coven")
+        let binary = support.appendingPathComponent("releases/v0.1.2/bin/coven")
         let existingState = try info(state) != nil
         if existingState { try directories(state, under: home, privateOnly: true) }
         let managed = try info(marker) != nil
         let legacy = !managed && previousPeer != nil && previousWatch != nil
-        let binary = legacy ? oldBinary : newBinary
         let port: Int
         if managed {
             try requireType(marker, S_IFREG, privateOnly: true)
@@ -347,9 +358,22 @@ final class Installer {
         }
         let peer = job("peer", binary, port)
         let watch = job("watch", binary, port)
-        for (existing, wanted) in [(previousPeer, peer), (previousWatch, watch)] {
-            if let existing, !NSDictionary(dictionary: existing).isEqual(to: wanted) { throw preserve("The saved login service uses different settings.") }
+        var earlier: [(role: String, executable: URL)] = []
+        for (role, saved) in [("watch", previousWatch), ("peer", previousPeer)] {
+            guard let saved else { continue }
+            if NSDictionary(dictionary: saved).isEqual(to: job(role, binary, port)) { continue }
+            guard let prior = [oldBinary, previousBinary].first(where: { NSDictionary(dictionary: saved).isEqual(to: job(role, $0, port)) }) else {
+                throw preserve("The saved login service uses different settings.")
+            }
+            try requireType(prior, S_IFREG)
+            let previousHash = architecture == "arm64" ? "8afaadf3d586a462b587483d449b42270d3affd95fa5865df8d49a67fc4d6937" : "2798d37004ed402e73b39c8b4248f0d422cc90c7909255f9e307d5d603fd1b81"
+            let actual = digest(try Data(contentsOf: prior, options: .mappedIfSafe))
+            guard (prior == previousBinary && actual == previousHash) || (prior == oldBinary && architecture == "arm64" && actual == qualifiedArm) else {
+                throw preserve("The earlier login executable has unexpected contents.")
+            }
+            earlier.append((role, prior))
         }
+        guard earlier.isEmpty || (previousPeer != nil && previousWatch != nil) else { throw preserve("The earlier login services are incomplete.") }
         step(.payload)
         guard let qualifiedSHA = bundle.object(forInfoDictionaryKey: "CovenPayloadSHA-" + architecture) as? String else {
             throw SetupFailure(stage, "MISSING-PAYLOAD", "This installer lacks a native executable for this Mac.", "Download the installer for your Mac from the private release.", "Missing architecture metadata")
@@ -360,13 +384,12 @@ final class Installer {
             throw SetupFailure(stage, "PAYLOAD", "The bundled executable failed its integrity check.", "Download a fresh copy of the installer from the private release.", "SHA-256 mismatch")
         }
         if try info(binary) == nil {
-            guard !legacy else { throw preserve("The earlier installation is missing its executable.") }
             try directories(binary.deletingLastPathComponent(), under: home)
             try publish(payload, at: binary, mode: 0o700)
         }
         try requireType(binary, S_IFREG)
         let installedHash = digest(try Data(contentsOf: binary, options: .mappedIfSafe))
-        guard installedHash == qualifiedSHA || (legacy && architecture == "arm64" && installedHash == qualifiedArm) else { throw preserve("The installed executable has unexpected contents.") }
+        guard installedHash == qualifiedSHA else { throw preserve("The installed executable has unexpected contents.") }
         step(.credentials)
         for child in ["client", "profile", "server"] {
             let directory = state.appendingPathComponent(child)
@@ -396,6 +419,33 @@ final class Installer {
             guard try info(clientDB) != nil, try info(root) != nil else { throw preserve("The configured folder or client database is missing.") }
         }
         if try info(root) != nil { try requireType(root, S_IFDIR) }
+        if let prior = earlier.first?.executable {
+            try requireType(clientDB, S_IFREG)
+            try requireType(peerDB, S_IFREG)
+            let previousStatus = try checked(prior, ["host", "status"])
+            let saved = try JSONSerialization.jsonObject(with: previousStatus.bytes) as? [String: Any]
+            guard saved?["root"] as? String == root.path, saved?["remote"] as? String == "http://127.0.0.1:\(port)" else {
+                throw preserve("The earlier services are bound to a different folder or peer.")
+            }
+            if !managed { try publish(Data(String(port).utf8), at: marker) }
+            // Stop owned jobs first. Until both old jobs and their daemon stop, their plists remain intact for retry.
+            for entry in earlier {
+                let target = domain + "/" + prefix + "." + entry.role
+                let active = try run("/bin/launchctl", ["print", target], env: env)
+                if active.status == 0 {
+                    let lines = active.text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }
+                    guard lines.contains("path = " + plist(entry.role).path), lines.contains("program = " + entry.executable.path) else {
+                        throw preserve("A different login service uses this label.")
+                    }
+                    _ = try checked(URL(fileURLWithPath: "/bin/launchctl"), ["bootout", target])
+                }
+            }
+            _ = try checked(prior, ["daemon", "stop"])
+            for entry in earlier {
+                let data = try PropertyListSerialization.data(fromPropertyList: job(entry.role, binary, port), format: .xml, options: 0)
+                try publish(data, at: plist(entry.role), replacing: true)
+            }
+        }
         step(.peer)
         let peerPID = try activate("peer", peer)
         try waitForListener(peerPID, port)

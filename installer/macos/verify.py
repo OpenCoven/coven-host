@@ -8,6 +8,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -28,7 +29,7 @@ def retry(probe):
     raise RuntimeError("Automatic transfer did not finish")
 
 
-def exercise(app, verifier, legacy_payload):
+def exercise(app, verifier, legacy_payload, previous_app=None, previous_verifier=None, deletions=False):
     with tempfile.TemporaryDirectory(prefix="ch-mac.", dir="/private/tmp") as tmp:
         home = Path(tmp)
         prefix = "org.opencoven.coven-host.test." + hashlib.sha256(tmp.encode()).hexdigest()[:12]
@@ -36,7 +37,7 @@ def exercise(app, verifier, legacy_payload):
         state = home / ".local/state/coven-host-mvp"
         agents = home / "Library/LaunchAgents"
         token = state / "access/token"
-        cli = home / "Library/Application Support/Coven Host/releases/v0.1.1/bin/coven"
+        cli = home / "Library/Application Support/Coven Host/releases/v0.1.2/bin/coven"
         env = {**os.environ, "HOME": tmp, "COVEN_HOME": str(state / "profile"), "COVEN_HOST_STATE": str(state / "client")}
         job_ids = [f"{domain}/{prefix}.{role}" for role in ["watch", "peer"]]
 
@@ -52,9 +53,26 @@ def exercise(app, verifier, legacy_payload):
         try:
             download = home / "Downloads/Coven Host.app"
             run("/usr/bin/ditto", app, download)
+            if previous_app:
+                run(previous_verifier, previous_app, home)
+                old = home / "Library/Application Support/Coven Host/releases/v0.1.1/bin/coven"
+                probe = home / "Coven/Castles/demo/files/before-upgrade.txt"
+                probe.write_bytes(b"before upgrade\x00\r\n")
+                api = ["--url", "http://127.0.0.1:" + (state / "installer-port").read_text(), "--token-file", token]
+                retry(lambda: run(old, "host", "get", "files/before-upgrade.txt", *api, env=env) == probe.read_bytes())
+                identity = token.stat().st_ino, token.read_bytes()
+                previous_pids = pids()
             run(verifier, download, home)
             installed_app = home / "Applications/Coven Host.app"
             run("/usr/bin/codesign", "--verify", "--all-architectures", "--deep", "--strict", installed_app)
+            if previous_app:
+                assert (token.stat().st_ino, token.read_bytes()) == identity
+                assert pids() != previous_pids
+                assert run(cli, "host", "get", "files/before-upgrade.txt", *api, env=env) == probe.read_bytes()
+                for f in agents.glob("*.plist"):
+                    assert plistlib.loads(f.read_bytes())["ProgramArguments"][0] == str(cli)
+                assert (app / "Contents/MacOS/CovenHostSetup").read_bytes() == (installed_app / "Contents/MacOS/CovenHostSetup").read_bytes()
+                print("PASS upgraded the signed v0.1.1 app, CLI, daemon and login services with exact original bytes and credential")
             assert installed_app.is_dir()
             app_inode = installed_app.stat().st_ino
             shutil.rmtree(download)
@@ -81,7 +99,6 @@ def exercise(app, verifier, legacy_payload):
                 old.parent.mkdir(parents=True)
                 old.write_bytes(legacy_payload.read_bytes())
                 old.chmod(0o700)
-                cli = old
                 (state / "installer-port").unlink()
                 for f in agents.glob("*.plist"):
                     config = plistlib.loads(f.read_bytes())
@@ -92,7 +109,15 @@ def exercise(app, verifier, legacy_payload):
                 assert installed_app.is_dir()
                 assert (token.stat().st_ino, token.read_bytes()) == identity
                 assert item.read_bytes() == run(cli, "host", "get", "files/example.txt", *api, env=env)
-                print("PASS resumed earlier v0.1.0 service definitions with original peer data and credential")
+                for f in agents.glob("*.plist"):
+                    assert plistlib.loads(f.read_bytes())["ProgramArguments"][0] == str(cli)
+                print("PASS upgraded v0.1.0 login services with the original peer data and credential")
+            if deletions:
+                unload()
+                sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
+                from installed_deletion import exercise as check_deletions
+                existing = home / "Coven", state / "server", token, int((state / "installer-port").read_text())
+                check_deletions(cli, home, existing, environment=env)
         finally:
             unload()
 
@@ -115,7 +140,7 @@ def exercise(app, verifier, legacy_payload):
         p = subprocess.run([verifier, fallback, home], capture_output=True, text=True, timeout=30)
         assert p.returncode == 1 and "CH-MAC-EXISTING-SETUP" in p.stdout, (p.returncode, p.stdout)
         report = (home / "diagnostics.txt").read_text()
-        for field in ["0.1.1", "Platform:", "UTC time:", "Stage:", "Expected:", "Observed:", "Error classification:", "Reproduction:", "Next action:"]:
+        for field in ["0.1.2", "Platform:", "UTC time:", "Stage:", "Expected:", "Observed:", "Error classification:", "Reproduction:", "Next action:"]:
             assert field in report
         assert all(value not in report for value in [tmp, str(Path.home()), "owner-private-file", "owner-private-data"])
         print("PASS unrelated app preserved, durable fallback opened for diagnostics, existing folder preserved, copy-to-pasteboard and save diagnostics, sanitized failure fields")
@@ -126,5 +151,10 @@ if __name__ == "__main__":
     parser.add_argument("app", type=Path)
     parser.add_argument("verifier", type=Path)
     parser.add_argument("--legacy-payload", type=Path)
+    parser.add_argument("--previous-app", type=Path)
+    parser.add_argument("--previous-verifier", type=Path)
+    parser.add_argument("--deletions", action="store_true", help="Exercise offline deletion and rename in this installer-created folder")
     args = parser.parse_args()
-    exercise(args.app, args.verifier, args.legacy_payload)
+    if bool(args.previous_app) != bool(args.previous_verifier):
+        parser.error("--previous-app and --previous-verifier are used together")
+    exercise(args.app, args.verifier, args.legacy_payload, args.previous_app, args.previous_verifier, args.deletions)

@@ -1,12 +1,11 @@
 #!/bin/bash
 set -euo pipefail
-if [[ $# != 2 && $# != 4 ]]; then
-  echo "Usage: build.sh macos-arm64.tgz output-directory [intel-executable expected-intel-sha256]" >&2
+if [[ $# != 4 && $# != 6 ]]; then
+  echo "Usage: build.sh arm64-executable expected-arm64-sha256 coven-license output-directory [intel-executable expected-intel-sha256]" >&2
   exit 2
 fi
 src="$(cd "$(dirname "$0")" && pwd)"
-pkg="$1"
-out="$2"
+out="$4"
 mkdir -p "$out"
 out="$(cd "$out" && pwd)"
 work="$(mktemp -d)"
@@ -16,23 +15,21 @@ res="$app/Contents/Resources"
 mac="$app/Contents/MacOS"
 helpers="$app/Contents/Helpers"
 mkdir -p "$res" "$mac" "$helpers"
-expected=e34b85823a362e6fef541adb70d6e6787f5eb9515dbc16ae859fb24d19806b18
 check() {
   [[ "$(shasum -a 256 "$1" | cut -d' ' -f1)" == "$2" ]] || { echo "Payload integrity check failed" >&2; exit 1; }
 }
-check "$pkg" 1e139a4cfbe416e05c91b24fd6e67cf9cf2f5c732c45d4c33e798f6ad15425c6
-tar -xOzf "$pkg" package/bin/coven > "$helpers/coven-arm64"
-check "$helpers/coven-arm64" "$expected"
-for license in LICENSE LICENSE-COVEN-HOST; do
-  tar -xOzf "$pkg" "package/$license" > "$res/$license"
-done
+check "$1" "$2"
+/usr/bin/lipo -verify_arch arm64 "$1"
+cp "$1" "$helpers/coven-arm64"
+cp "$3" "$res/LICENSE"
+cp "$src/../../LICENSE" "$res/LICENSE-COVEN-HOST"
 p="$app/Contents/Info.plist"
 cp "$src/Info.plist" "$p"
 archs=(arm64)
-if [[ $# == 4 ]]; then
-  check "$3" "$4"
-  /usr/bin/lipo -verify_arch x86_64 "$3"
-  cp "$3" "$helpers/coven-x86_64"
+if [[ $# == 6 ]]; then
+  check "$5" "$6"
+  /usr/bin/lipo -verify_arch x86_64 "$5"
+  cp "$5" "$helpers/coven-x86_64"
   archs+=(x86_64)
 fi
 outputs=()
@@ -71,5 +68,5 @@ if [[ -n "${COVEN_NOTARY_PROFILE:-}" ]]; then
   xcrun stapler validate "$work/reopened/Coven Host.app"
   spctl -a -t exec -vv "$work/reopened/Coven Host.app"
 fi
-mv "$work/release.zip" "$out/Coven-Host-0.1.1-macOS.zip"
-shasum -a 256 "$out/Coven-Host-0.1.1-macOS.zip"
+mv "$work/release.zip" "$out/Coven-Host-0.1.2-macOS.zip"
+shasum -a 256 "$out/Coven-Host-0.1.2-macOS.zip"

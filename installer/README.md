@@ -11,11 +11,11 @@ Start with the [release installation guide](../docs/setup.md) for user-visible b
 
 ## Linux release inputs
 
-Use the qualified Linux x64 CLI tarball from the [v0.1.0 release](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.0). Build the ARM64 CLI from the same locked integration revision using the pinned Rust toolchain on Linux ARM64. Verify its executable digest against the qualified build before packaging it. Both builders take their license files from the CLI package.
+Use binaries from the reviewed Coven manifest and lockfile. Record the SHA-256 of each executable during its installed qualification. Supply the matching Coven checkout’s LICENSE. The builder verifies the executable hash and ELF architecture and records its glibc requirement.
 
 ```sh
-python3 installer/linux/build.py --package "$LINUX_CLI_TARBALL" --out "$OUTPUT"
-python3 installer/linux/build.py --arch arm64 --native "$ARM64_CLI" --sha256 1cc0910d8f5210f0696fdf01c372f74bf93eac43c748f1babaadb6b62410d013 --package "$LINUX_CLI_TARBALL" --out "$OUTPUT"
+python3 installer/linux/build.py --arch amd64 --native "$X64_CLI" --sha256 "$X64_SHA256" --coven-license "$COVEN_LICENSE" --out "$OUTPUT"
+python3 installer/linux/build.py --arch arm64 --native "$ARM64_CLI" --sha256 "$ARM64_SHA256" --coven-license "$COVEN_LICENSE" --out "$OUTPUT"
 ```
 
 ## Offline kit
