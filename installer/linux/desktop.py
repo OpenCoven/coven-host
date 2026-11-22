@@ -570,7 +570,7 @@ def main():
             kind = errno.errorcode.get(err.errno, "OS error")
             # A source location is reproducible across installations and contains no profile or file names.
             frames = [f for f in traceback.extract_tb(err.__traceback__) if f.filename == __file__]
-            location = f" in desktop.py:{frames[-1].lineno} ({frames[-1].name})" if frames else ""
+            location = " in desktop.py " + " > ".join(f"{frame.name}:{frame.lineno}" for frame in frames[-4:]) if frames else ""
             problem = Problem("STORAGE", "access local resources", "readable and writable local resources", kind,
                               "Check free disk space and user permissions, then reopen Coven Host.", f"errno {err.errno}{location}")
         else:
