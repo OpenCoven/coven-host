@@ -1,0 +1,63 @@
+name: Installed deletion on native Windows x64
+on:
+  push:
+    branches: [delivery/5-installed-delete]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: windows-2025
+    timeout-minutes: 70
+    env:
+      COVEN_NPM_VERSION: 0.1.2-qualification.5
+      COVEN_BUILD_VERSION: v0.1.2-qualification.5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: OpenCoven/coven
+          ref: 6855b5a4b0b26f08bd711d302ffc8534b27ebea2
+          path: consumer
+          persist-credentials: false
+      - name: Verify native x64 and NTFS
+        shell: pwsh
+        run: |
+          $arch = [Runtime.InteropServices.RuntimeInformation]::OSArchitecture
+          $volume = Get-Volume -DriveLetter ([IO.Path]::GetPathRoot($env:TEMP)[0])
+          if ("$arch" -ne 'X64' -or $env:RUNNER_ARCH -ne 'X64' -or $volume.FileSystem -ne 'NTFS') { throw 'Requires native x64 Windows and NTFS' }
+          Get-CimInstance Win32_OperatingSystem | Select-Object Caption, BuildNumber, OSArchitecture
+          Write-Output "Runner architecture $arch, volume $($volume.FileSystem), hosted VM"
+      - name: Verify immutable consumer source and resolved Host pin
+        working-directory: consumer
+        shell: bash
+        run: |
+          set -eu
+          old=65927dd5e64d732cb99926bed66492994acdcec5
+          new=8987cfe5cd7d0f42bfe7f7e7d797af6a164972db
+          sed -i "s/$old/$new/g" crates/coven-cli/Cargo.toml Cargo.lock
+          git add -- crates/coven-cli/Cargo.toml Cargo.lock
+          test "$(git write-tree)" = 1e3349265570157139c566ffd657e29a837bd61f
+          git diff --cached --stat
+          echo "Consumer b62ed26306cc64034021996b76380b389dda0f7a source tree verified, Host $new"
+      - name: Build and pack the native CLI and npm wrapper
+        working-directory: consumer
+        shell: bash
+        run: |
+          set -eu
+          cargo build --release --locked -p coven-cli --target x86_64-pc-windows-msvc
+          node scripts/publish-npm.mjs --target=windows --skip-build --dry-run
+          mkdir packages-for-test
+          npm pack ./npm/dist/windows --pack-destination packages-for-test
+          npm pack ./npm/dist/coven --pack-destination packages-for-test
+          cd packages-for-test
+          npm install --offline --no-audit --no-fund --ignore-scripts ./*.tgz
+          sha256sum ./*.tgz
+      - name: Qualify the installed binary through its production daemon
+        shell: pwsh
+        run: |
+          $binary = & consumer/packages-for-test/node_modules/.bin/coven.cmd --print-native-binary-path
+          if ($LASTEXITCODE -ne 0) { throw 'Installed wrapper failed' }
+          Get-FileHash $binary -Algorithm SHA256
+          python tests/installed_deletion.py $binary
