@@ -26,4 +26,20 @@ jobs:
           if ($packages.Count -ne 1 -or (Get-FileHash $packages[0].FullName).Hash -ne '39eb7168dd6fcaedbdcf88b225858bea04b4ac54b41a4d3b672e7b179e6d83ad') { throw 'Windows control missing' }
           tar xf $packages[0].FullName package/bin/coven.exe
           if ((Get-FileHash package/bin/coven.exe).Hash -ne 'bee722f49bfbcb9e24adbeb9cb793c2cbfe67d110680eaf217833f2fdb1e91bb') { throw 'Incorrect control binary' }
-          python tests/installed_deletion.py (Resolve-Path package/bin/coven.exe)
+          $module = (Resolve-Path tests).Path
+          $env:PYTHONPATH = $module
+          $env:CONTROL_CLI = (Resolve-Path package/bin/coven.exe).Path
+          $env:CONTROL_ROOT = Join-Path $env:RUNNER_TEMP 'acl-control'
+          New-Item -ItemType Directory $env:CONTROL_ROOT | Out-Null
+          python -c "import os; from pathlib import Path; from installed_deletion import exercise; exercise(Path(os.environ['CONTROL_CLI']),Path(os.environ['CONTROL_ROOT']))"
+          $result = $LASTEXITCODE
+          $current = [Security.Principal.WindowsIdentity]::GetCurrent().User
+          $admin = [Security.Principal.SecurityIdentifier]::new('S-1-5-32-544')
+          $items = @(Get-ChildItem (Join-Path $env:CONTROL_ROOT 'castle') -Recurse -Force; Get-ChildItem (Join-Path $env:CONTROL_ROOT 'profile') -Recurse -Force)
+          foreach ($i in $items) {
+            if ($i.Name -notin '.lock','after.txt','moved-back.txt','.coven-previous-versions','previous-versions','.coven-recovery','recovery') { continue }
+            $owner = (Get-Acl -LiteralPath $i.FullName).GetOwner([Security.Principal.SecurityIdentifier])
+            $category = if ($current -eq $owner) { 'user' } elseif ($admin -eq $owner) { 'administrators' } else { 'other' }
+            Write-Output "Owner of $($i.Name) is $category"
+          }
+          exit $result
