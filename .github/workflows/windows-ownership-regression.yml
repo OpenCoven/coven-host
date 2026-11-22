@@ -12,7 +12,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: c39e4474be545ae64fdb6bc88bcfa7e3443286be
+          ref: 3b86f79d895d4c044a9624aa4b494a788e3f4043
           persist-credentials: false
       - name: Verify the group-owned file control is active
         shell: pwsh
