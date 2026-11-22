@@ -13,11 +13,12 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: e63875b6cb24f94914ec97e7dbd42bcb8884ec36
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: OpenCoven/coven
-          ref: 6855b5a4b0b26f08bd711d302ffc8534b27ebea2
+          ref: 8fb558c60b006b337bf7850e6e43e0793b788097
           path: consumer
           persist-credentials: false
       - name: Verify immutable consumer source and resolved Host pin
@@ -25,19 +26,14 @@ jobs:
         shell: bash
         run: |
           set -eu
-          old=65927dd5e64d732cb99926bed66492994acdcec5
-          new=247904def96591b7f473a6e9a98ec8363b925da0
-          sed -i "s/$old/$new/g" crates/coven-cli/Cargo.toml Cargo.lock
-          git add -- crates/coven-cli/Cargo.toml Cargo.lock
           test "$(git write-tree)" = 1a7978ff82e5a4e39d65f0274c13e5d4b32e380e
-          git diff --cached --stat
-          echo "Consumer base $(git rev-parse HEAD), verified source tree $(git write-tree), Host $new"
+          grep -F 247904def96591b7f473a6e9a98ec8363b925da0 crates/coven-cli/Cargo.toml Cargo.lock
       - name: Build and pack the native CLI and npm wrapper
         working-directory: consumer
         shell: bash
         run: |
           set -eu
-          export COVEN_BUILD_VERSION=v0.1.2-review COVEN_NPM_VERSION=0.1.2-review
+          export COVEN_BUILD_VERSION=v0.1.2 COVEN_NPM_VERSION=0.1.2 COVEN_BUILD_COMMIT=8fb558c60b006b337bf7850e6e43e0793b788097
           cargo build --release --locked -p coven-cli --target x86_64-pc-windows-msvc
           node scripts/publish-npm.mjs --target=windows --skip-build --dry-run
           mkdir packages-for-test
@@ -86,9 +82,8 @@ jobs:
         shell: powershell
         run: |
           ./tests/windows/run-as-standard-user.ps1 -Installer (Resolve-Path assets/*.exe).Path -PreviousInstaller (Resolve-Path previous/*.exe).Path
-      - name: Qualify the unpacked wrapper in an elevated disposable profile
+      - name: Verify actionable diagnostics for a group-owned elevated profile
         shell: pwsh
         run: |
-          $binary = & consumer/packages-for-test/node_modules/.bin/coven.cmd --print-native-binary-path
-          if ($LASTEXITCODE -ne 0) { throw 'Installed wrapper failed' }
-          python tests/installed_deletion.py $binary
+          $env:PYTHONPATH = (Resolve-Path tests).Path
+          python tests/windows/qualify-installer.py --group-owned (Resolve-Path assets/*.exe).Path
