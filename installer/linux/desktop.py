@@ -294,7 +294,7 @@ def prepare():
         with tempfile.TemporaryDirectory(dir=STATE.parent) as temp:
             staged = Path(temp) / "state"
             staged.mkdir(mode=0o700)
-            (staged / "access-token").write_text(secrets.token_urlsafe(48) + "\n")
+            write_file(staged / "access-token", (secrets.token_urlsafe(48) + "\n").encode("ascii"))
             (staged / "desktop.json").write_text(json.dumps({"owner": "Coven Host Desktop", "port": port}))
             staged.rename(STATE)
     private(STATE)
@@ -385,10 +385,10 @@ def service(systemd):
                 "the bundled peer on its saved loopback port", "peer failed to listen",
                 "Close any program using the saved peer port, then reopen Coven Host. If this repeats, send support this report.",
                 f"peer exit {peer.returncode}" if peer.returncode is not None else "peer readiness timed out")
+        if not present(DB) or not present(ROOT / ".coven-profile"):
+            success(command("init", "--root", ROOT), "INIT", "initialize the folder",
+                    "an initialized folder", "folder setup failed", RETRY)
         if not record.get("ready"):
-            if not present(DB):
-                success(command("init", "--root", ROOT), "INIT", "initialize the folder",
-                        "an initialized folder", "folder setup failed", RETRY)
             status = command("status")
             success(status, "STATUS", "inspect client configuration", "readable client state", "client unavailable", RETRY)
             if json.loads(status.stdout).get("remote") is None:
