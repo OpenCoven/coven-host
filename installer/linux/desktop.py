@@ -18,6 +18,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
 
 VERSION = "0.1.2"
@@ -567,8 +568,11 @@ def main():
             problem = Problem("TIMEOUT", "wait for setup", "timely response", "operation timed out", RETRY)
         elif isinstance(err, OSError):
             kind = errno.errorcode.get(err.errno, "OS error")
+            # A source location is reproducible across installations and contains no profile or file names.
+            frames = [f for f in traceback.extract_tb(err.__traceback__) if f.filename == __file__]
+            location = f" in desktop.py:{frames[-1].lineno} ({frames[-1].name})" if frames else ""
             problem = Problem("STORAGE", "access local resources", "readable and writable local resources", kind,
-                              "Check free disk space and user permissions, then reopen Coven Host.", f"errno {err.errno}")
+                              "Check free disk space and user permissions, then reopen Coven Host.", f"errno {err.errno}{location}")
         else:
             problem = Problem("RUNTIME", "run setup", "valid installation and runtime", type(err).__name__, RETRY)
         body = report(problem)

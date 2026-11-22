@@ -14,7 +14,12 @@ import time
 
 
 def run(*args, **kwargs):
-    return subprocess.run(args, check=True, capture_output=True, timeout=75, **kwargs).stdout
+    result = subprocess.run(args, capture_output=True, timeout=75, **kwargs)
+    if result.returncode and result.stdout.startswith(b"Coven Host installer "):
+        # SetupFailure.report intentionally omits account paths, tokens and folder contents.
+        raise RuntimeError(result.stdout.decode("utf-8", errors="replace").strip())
+    result.check_returncode()
+    return result.stdout
 
 
 def retry(probe):
