@@ -277,12 +277,12 @@ final class Installer {
         for name in destinationNames {
             let destination = applications.appendingPathComponent(name)
             let installed = try info(destination)
-            let upgrade = installed?.st_mode ?? 0
-            let priorApp = upgrade & S_IFMT == S_IFDIR && installed?.st_uid == getuid()
+            let mode = installed?.st_mode ?? 0
+            let priorApp = mode & S_IFMT == S_IFDIR && installed?.st_uid == getuid()
                 && Bundle(url: destination)?.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String == "0.1.1"
             let replace: Bool
             if priorApp {
-                let requirement = "=identifier org.opencoven.coven-host.installer and anchor apple generic and certificate leaf[subject.OU] = \"9LR8Z8UQ9X\""
+                let requirement = "=identifier \"org.opencoven.coven-host.installer\" and anchor apple generic and certificate leaf[subject.OU] = \"9LR8Z8UQ9X\""
                 replace = try run("/usr/bin/codesign", ["--verify", "--all-architectures", "--deep", "--strict", "-R", requirement, destination.path], env: env).status == 0
             } else {
                 replace = false
