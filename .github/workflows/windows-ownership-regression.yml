@@ -1,0 +1,25 @@
+name: Verify refused NTFS recovery preserves document permissions
+on:
+  push:
+    branches: [qualification/5-desktop]
+    paths: [.github/workflows/windows-ownership-regression.yml]
+permissions:
+  contents: read
+jobs:
+  ownership:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: c39e4474be545ae64fdb6bc88bcfa7e3443286be
+          persist-credentials: false
+      - name: Verify the group-owned file control is active
+        shell: pwsh
+        run: |
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          $file = New-TemporaryFile
+          $owner = (Get-Acl $file).GetOwner([Security.Principal.SecurityIdentifier])
+          if ($identity.User -eq $owner) { throw 'Expected the group-owned control to run' }
+          Remove-Item -LiteralPath $file.FullName
+      - run: cargo test --locked --lib refusing_a_group_owned_file_preserves_its_permissions
