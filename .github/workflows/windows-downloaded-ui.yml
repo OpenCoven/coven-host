@@ -1,0 +1,62 @@
+name: Verify downloaded Windows installers in both account contexts
+on:
+  push:
+    branches: [qualification/5-desktop]
+    paths: [.github/workflows/windows-downloaded-ui.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  desktop:
+    runs-on: windows-2025
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - run: 45010508872
+            head: 11687bdb5f37a6412c4688954c494e4e07d12d78
+          - run: 45011072040
+            head: fc4c4fd91c249ea7495d8e39aa82aaf0dc2d6b96
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: cabec50ab0674a65988a768439f352d0b29702c7
+          persist-credentials: false
+      - name: Verify the build and download its exact artifact bytes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILD_RUN: ${{ matrix.run }}
+          BUILD_HEAD: ${{ matrix.head }}
+        run: |
+          $info = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN" | ConvertFrom-Json
+          if ($info.head_sha -ne $env:BUILD_HEAD) { throw 'Unexpected builder revision' }
+          $until = (Get-Date).AddMinutes(12)
+          do {
+            $result = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN/artifacts" | ConvertFrom-Json
+            $asset = $result.artifacts | Where-Object name -eq 'windows-x64-installer'
+            if (!$asset) { Start-Sleep -Seconds 20 }
+          } while (!$asset -and (Get-Date) -lt $until)
+          if (!$asset) { throw 'Installer did not become available' }
+          gh api "repos/$env:GITHUB_REPOSITORY/actions/artifacts/$($asset.id)/zip" > installer.zip
+          if ("sha256:" + (Get-FileHash installer.zip).Hash.ToLowerInvariant() -ne $asset.digest) { throw 'Installer artifact digest mismatch' }
+          Expand-Archive installer.zip -DestinationPath candidate
+          $setup = (Resolve-Path candidate/*.exe).Path
+          Get-FileHash $setup
+          gh release download v0.1.1 --repo $env:GITHUB_REPOSITORY --pattern 'Coven-Host-0.1.1-Windows-x64.exe' -D previous
+          if ((Get-FileHash (Resolve-Path previous/*.exe)).Hash -ne 'FA5B2D763805ED73BD82130654E3456596AC26388BD762400916CAD92CD655A2') { throw 'Previous release digest mismatch' }
+      - name: Read the group-owned session diagnostic
+        shell: pwsh
+        run: |
+          $env:PYTHONPATH = (Resolve-Path tests).Path
+          python tests/windows/qualify-installer.py --group-owned (Resolve-Path candidate/*.exe).Path
+      - name: Exercise a fresh installation on NTFS
+        shell: powershell
+        run: |
+          if ((Get-Volume -DriveLetter ($env:SystemDrive[0])).FileSystem -ne 'NTFS') { throw 'NTFS required' }
+          ./tests/windows/run-as-standard-user.ps1 -Installer (Resolve-Path candidate/*.exe).Path
+      - name: Exercise an upgraded v0.1.1 installation
+        shell: powershell
+        run: |
+          ./tests/windows/run-as-standard-user.ps1 -Installer (Resolve-Path candidate/*.exe).Path -PreviousInstaller (Resolve-Path previous/*.exe).Path
