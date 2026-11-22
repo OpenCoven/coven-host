@@ -54,8 +54,8 @@ def exercise(binary, work, installation=None, environment=None):
     url = f"http://127.0.0.1:{port}"
     auth = ["--url", url, "--token-file", token]
 
-    def cli(*args, success=True):
-        p = subprocess.run([binary, *args], env=env, capture_output=True, timeout=60)
+    def cli(*args, success=True, profile=env):
+        p = subprocess.run([binary, *args], env=profile, capture_output=True, timeout=60)
         if (p.returncode == 0) != success:
             raise RuntimeError(f"{args[:2]} returned {p.returncode}: {p.stdout[-400:]} {p.stderr[-400:]}")
         return p.stdout
@@ -125,6 +125,68 @@ def exercise(binary, work, installation=None, environment=None):
         stop(watcher)
         cli("daemon", "restart")
         print("PASS offline rename, daemon and peer restart, automatic watcher convergence and peer recovery", flush=True)
+
+        # A second Castle folder picks up the published file and renames it while offline.
+        other_env = {**env, "COVEN_HOME": str(work / "other-profile"),
+                     "COVEN_HOST_STATE": str(work / "other-state")}
+        other_root = work / "other-castle"
+        other_files = other_root / "Castles/demo/files"
+
+        def other(*args):
+            return cli(*args, profile=other_env)
+
+        try:
+            other("host", "init", "--root", other_root)
+            other("host", "connect", url, "--token-file", token)
+            other("host", "sync")
+            assert (other_files / after.name).read_bytes() == content
+            cli("daemon", "stop")
+            stop(peer)
+            moved = other_files / "moved-back.txt"
+            (other_files / after.name).rename(moved)
+            other("daemon", "restart")
+            peer = peer_start()
+            until(ready)
+            other("host", "sync")
+            assert after.read_bytes() == content and not (files / moved.name).exists()
+            watcher = subprocess.Popen([binary, "host", "watch"], env=env, stdout=subprocess.DEVNULL)
+            received = files / moved.name
+            until(lambda: not after.exists() and received.exists() and received.read_bytes() == content)
+            stop(watcher)
+            cli("host", "sync")
+            view = inventory()
+            assert view["deleted"]["files/after.txt"] == 2
+            assert any(row["path"] == "files/moved-back.txt" and row["revision"] == 1 for row in view["files"])
+            assert any(Path(p).read_bytes() == content for p in status()["previousVersions"]
+                       if after.name in Path(p).parts)
+            archive_bytes("files/after.txt", content)
+            assert moved.read_bytes() == received.read_bytes() == content
+            print("PASS second Castle renamed offline; first watcher received the exact bytes and retained the old path in previous versions", flush=True)
+
+            stop(peer)
+            edited = b"first Castle edit\x00\r\n"
+            received.write_bytes(edited)
+            moved.unlink()
+            cli("daemon", "restart")
+            peer = peer_start()
+            until(ready)
+            other("host", "sync")
+            cli("host", "sync", success=False)
+            conflict, = status()["conflicts"]
+            assert conflict["remoteDeleted"] and conflict["revision"] == 2
+            saved = Path(conflict["local"])
+            assert saved.read_bytes() == edited
+            cli("host", "resolve", "files/moved-back.txt", "--local")
+            cli("host", "sync")
+            other("host", "sync")
+            assert received.read_bytes() == moved.read_bytes() == saved.read_bytes() == edited
+            assert request("GET", "/files/moved-back.txt") == (200, edited)
+            assert any(row["path"] == "files/moved-back.txt" and row["revision"] == 3 for row in inventory()["files"])
+            assert not status()["conflicts"] and not json.loads(other("host", "status"))["conflicts"]
+            archive_bytes("files/moved-back.txt", content)
+            print("PASS kept the first Castle's edit after the second Castle deleted offline; both folders converged at peer revision 3 and the recovery copy survived", flush=True)
+        finally:
+            subprocess.run([binary, "daemon", "stop"], env=other_env, capture_output=True, timeout=30)
 
         path = files / "conflict.txt"
         path.write_bytes(b"base")

@@ -8,6 +8,8 @@ Version 0.1.1 is the distributed desktop installer. The 0.1.2 candidate adds rec
 
 The corrected Host revision passed the historical Linux suite and installed macOS checks, including upgrading a downloaded v0.1.1 installation. The installed Mac CLI also reconnected to an ARM64 Linux peer over SSH after a tunnel outage and peer restart. Native Windows x64/NTFS passed the held-open file scenario. Both native Linux architectures passed installed qualification, including builds at the published glibc 2.34 minimum. The remaining delivery gates are review, the final consumer pin, signed distribution, and repeating both recovery journeys from the published installer. [Platform and SSH receipts](https://github.com/OpenCoven/coven-host/issues/20)
 
+Two installed Castle folders also exchanged an offline rename in both directions. When one folder deleted a file and the other edited it, choosing the edit restored identical bytes in both folders at peer revision 3. The receiving client retained the old path under `previousVersions`. The downloaded Mac candidate also retried a deletion after a lost acknowledgement and refused to resurrect a file after a peer rollback. [Offline kit hashes](https://github.com/OpenCoven/coven-host/issues/5#issuecomment-7076674853) · [Installed two-folder checks on Linux and Windows](https://github.com/OpenCoven/coven-host/actions/runs/45004210827)
+
 ## Milestones
 
 | Deliverable | Owner | State on 2026-11-20 | Completion evidence or next gate |
