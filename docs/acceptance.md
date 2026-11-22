@@ -32,6 +32,12 @@ The platform chooser passed browser checks for supported and unsupported systems
 
 Apple accepted the signed macOS app. After stapling the ticket, the release maintainer extracted the final archive and verified its code signature for both architectures. Gatekeeper accepted it as Notarized Developer ID from Soul Protocol LLC. The shipping app uses the signed-in account. The private test profile is confined to the separate verifier. [Apple submission run](https://github.com/OpenCoven/chat/actions/runs/44323270011)
 
+### Desktop installer v0.1.2
+
+Public downloads passed the signed release manifest checks. The stapled Mac app passed Gatekeeper and upgraded v0.1.1 on Apple silicon/APFS. Two Castle folders converged after disconnected renames in both directions. A delete-versus-edit conflict preserved the edited bytes after explicit resolution. The same release recovered across an SSH disconnect to an ARM64 Linux guest on the Mac. [Release and checksums](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.2) · [Mac recovery evidence](https://github.com/OpenCoven/coven-host/issues/5#issuecomment-7082956073)
+
+The published offline kit installed on native Linux x64 and ARM64 runners using ext4. On an x64 Windows Server runner using NTFS, a standard user upgraded from v0.1.1, recovered a held-open file after releasing its handle and completed both sync journeys. The Windows EXE is unsigned. Physical Intel Mac and separate physical-host SSH qualification remain open. [Public Windows and Linux download runs](https://github.com/OpenCoven/coven-host/actions/runs/45050106799) · [Exact package and build identities](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/installer-receipt.json)
+
 ### Verify a release download
 
 The annotated release tag signs the SHA-256 digest of the release asset named `SHA256SUMS`. Use the verified release tag as the reference. Compare the digest printed for the manifest with the value in the signed tag message, then compare the selected installer with its entry in that manifest. The checksum file inside the offline ZIP covers the files in the extracted kit.
@@ -40,8 +46,8 @@ With the Windows installer and the release manifest in Downloads, open PowerShel
 
 ```powershell
 Get-FileHash .\SHA256SUMS -Algorithm SHA256
-Get-FileHash .\Coven-Host-0.1.1-Windows-x64.exe -Algorithm SHA256
-Select-String -Path .\SHA256SUMS -Pattern '  Coven-Host-0\.1\.1-Windows-x64\.exe$'
+Get-FileHash .\Coven-Host-0.1.2-Windows-x64.exe -Algorithm SHA256
+Select-String -Path .\SHA256SUMS -Pattern '  Coven-Host-0\.1\.2-Windows-x64\.exe$'
 ```
 
 On macOS, run `shasum -a 256 SHA256SUMS` to check the manifest itself. After extracting the offline kit, run `shasum -a 256 -c SHA256SUMS` from the extracted folder. On Linux, use `sha256sum` in place of `shasum -a 256`.

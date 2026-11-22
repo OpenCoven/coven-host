@@ -1,15 +1,15 @@
 # Install Coven Host
 
-Download the installer for the computer where you want the folder. Open it in your usual account. It sets up a private peer on that computer, starts synchronization, and opens your Coven folder. [Coven Host downloads](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.1)
+Download the installer for the computer where you want the folder. Open it in your usual account. It sets up a private peer on that computer, starts synchronization, and opens your Coven folder. [Coven Host downloads](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.2)
 
 | Computer | Download | What to do |
 | --- | --- | --- |
-| Mac, Apple Silicon or Intel | [macOS installer](https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-macOS.zip) | Open the ZIP, then open the Coven Host app. |
-| Windows x64, including Windows 11 on ARM with x64 emulation | [Windows setup](https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-Windows-x64.exe) | Open the downloaded EXE. Use **Coven Host** in the Start menu on subsequent visits. |
-| Ubuntu or Debian, Intel/AMD 64-bit | [Linux desktop package](https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-amd64.deb) | Open the package, select **Install**, then open **Coven Host** from Applications. |
-| Ubuntu or Debian, ARM64 | [ARM64 desktop package](https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-arm64.deb) | Open the package, select **Install**, then open **Coven Host** from Applications. |
+| Mac, Apple Silicon or Intel | [macOS installer](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-macOS.zip) | Open the ZIP, then open the Coven Host app. |
+| Windows x64, including Windows 11 on ARM with x64 emulation | [Windows setup](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Windows-x64.exe) | Open the downloaded EXE. Use **Coven Host** in the Start menu on subsequent visits. |
+| Ubuntu or Debian, Intel/AMD 64-bit | [Linux desktop package](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-amd64.deb) | Open the package, select **Install**, then open **Coven Host** from Applications. |
+| Ubuntu or Debian, ARM64 | [ARM64 desktop package](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-arm64.deb) | Open the package, select **Install**, then open **Coven Host** from Applications. |
 
-If you are unsure which download to choose, open the [download guide](https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Start-Here.html). For offline installation, download the [offline kit](https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-Offline.zip), extract the entire ZIP, and open **Start-Here.html**. It selects a platform when your browser identifies one and lets you change the selection.
+If you are unsure which download to choose, open the [download guide](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Start-Here.html). For offline installation, download the [offline kit](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Offline.zip), extract the entire ZIP, and open **Start-Here.html**. It selects a platform when your browser identifies one and lets you change the selection.
 
 ## Use the folder
 
@@ -19,7 +19,7 @@ If two edits conflict, keep both versions and choose how to resolve them. A dele
 
 ## When a package cannot open
 
-- **Linux without a graphical package manager or administrator access.** Download the [x86-64 portable archive](https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-x86_64.tar.gz) or [ARM64 portable archive](https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-aarch64.tar.gz). Extract it and open **Install Coven Host**. On a server, run `./'Install Coven Host'` from the extracted directory. The Linux launcher requires Python 3.8 or later and glibc 2.34 or later. The native sync engine is Rust. Without a systemd user manager, use desktop autostart or run the launcher with `--foreground` under your service manager.
+- **Linux without a graphical package manager or administrator access.** Download the [x86-64 portable archive](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-x86_64.tar.gz) or [ARM64 portable archive](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-aarch64.tar.gz). Extract it and open **Install Coven Host**. On a server, run `./'Install Coven Host'` from the extracted directory. The Linux launcher requires Python 3.8 or later and glibc 2.34 or later. The native sync engine is Rust. Without a systemd user manager, use desktop autostart or run the launcher with `--foreground` under your service manager.
 - **Windows publisher warning or managed-device policy.** Windows may display an unknown-publisher warning. Use the signed release checksum manifest to verify the download and ask your administrator to approve the installer on managed devices.
 - **Older or different devices.** The macOS installer requires macOS 11 or later. Windows requires x64 execution. The Linux downloads require x86-64 or ARM64 with glibc. For other desktop configurations, the [advanced installation and source instructions](install.md) describe the existing CLI packages and the source needed for a port. Phones, tablets and 32-bit systems do not have a qualified installer.
 - **Download failure.** Open the release page in your browser and choose the asset for your computer. For a machine without internet access, transfer the offline kit and extract it before opening the guide.
