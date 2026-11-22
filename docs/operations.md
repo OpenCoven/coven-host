@@ -4,7 +4,7 @@ Use a Coven CLI and daemon built with the `hostSync` capability. The [acceptance
 
 ## Recover a deletion or rename
 
-The v0.1.1 desktop release preserves a missing synchronized file on the peer for operator attention. The 0.1.2 candidate negotiates deletion support between the native client and peer. When an editor renames a file offline, the next sync can publish its new path and retire the old path in separate operations. After an interrupted connection, reconnect and run `coven host sync` to finish. [Release status](plan.md#offline-deletion-and-rename-release)
+The v0.1.1 desktop release preserves a missing synchronized file on the peer for operator attention. The v0.1.2 desktop release negotiates deletion support between the native client and peer. When an editor renames a file offline, the next sync can publish its new path and retire the old path in separate operations. After an interrupted connection, reconnect and run `coven host sync` to finish. [Release status](plan.md#offline-deletion-and-rename-release)
 
 If one side deletes a file and the other side edits it, run `coven host status`. The conflict entry identifies the deleted side, peer revision and recovery path for the surviving edit. Copy the recovered bytes if needed. Choose the outcome with `coven host resolve files/note.md --local` or `coven host resolve files/note.md --remote`, then run `coven host sync`. Selecting the deleted side removes the file at the synchronized path. If both copies have since been deleted, the next sync clears the conflict and keeps the previously reported recovery file.
 
