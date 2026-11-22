@@ -200,7 +200,6 @@ fn check_access(file: &File, require_private_acl: bool) -> Result<()> {
 mod tests {
     use super::*;
     use std::os::windows::fs::OpenOptionsExt;
-    use std::process::Command;
     use windows_sys::Win32::Storage::FileSystem::{READ_CONTROL, WRITE_DAC};
 
     #[test]
@@ -210,25 +209,48 @@ mod tests {
         std::fs::write(&path, b"original")?;
         // An elevated Windows token can assign the Administrators group as the
         // default owner. Ordinary per-user sessions exercise the positive path.
-        let observe = || -> Result<Vec<u8>> {
-            let output = Command::new("powershell.exe")
-                .args(["-NoProfile", "-NonInteractive", "-Command",
-                    "$a = Get-Acl -LiteralPath $env:COVEN_ACL_TEST_FILE -ErrorAction Stop; if ($a.GetOwner([System.Security.Principal.SecurityIdentifier]) -ne [System.Security.Principal.WindowsIdentity]::GetCurrent().User) { $a.Sddl }"])
-                .env("COVEN_ACL_TEST_FILE", &path)
-                .output()?;
-            ensure!(output.status.success(), "cannot inspect the fixture ACL");
-            Ok(output.stdout)
-        };
-        let before = observe()?;
-        if before.is_empty() {
-            return Ok(());
-        }
         let file = File::options()
             .access_mode(READ_CONTROL | WRITE_DAC)
             .open(&path)?;
+        let observe = || -> Result<Option<Vec<u8>>> {
+            let (mut owner, mut acl, mut descriptor) = (null_mut(), null_mut(), null_mut());
+            let result = unsafe {
+                GetSecurityInfo(
+                    file.as_raw_handle(),
+                    SE_FILE_OBJECT,
+                    OWNER_SECURITY_INFORMATION | DACL_SECURITY_INFORMATION,
+                    &mut owner,
+                    null_mut(),
+                    &mut acl,
+                    null_mut(),
+                    &mut descriptor,
+                )
+            };
+            if result != ERROR_SUCCESS {
+                return Err(io::Error::from_raw_os_error(result as i32).into());
+            }
+            let _hold = Local(descriptor);
+            ensure!(!owner.is_null() && !acl.is_null() && unsafe { IsValidAcl(acl) } != 0);
+            if unsafe { EqualSid(owner, User::current()?.sid()) } != 0 {
+                return Ok(None);
+            }
+            // GetSecurityInfo keeps the complete ACL in the descriptor until LocalFree.
+            Ok(Some(
+                unsafe {
+                    std::slice::from_raw_parts(acl.cast::<u8>(), usize::from((*acl).AclSize))
+                }
+                .to_vec(),
+            ))
+        };
+        let Some(before) = observe()? else {
+            return Ok(());
+        };
         let error = protect(&file).expect_err("group-owned document must be refused");
         ensure!(error.to_string().contains("owned by the current user"));
-        ensure!(observe()? == before, "refusal changed the document ACL");
+        ensure!(
+            observe()? == Some(before),
+            "refusal changed the document ACL"
+        );
         ensure!(std::fs::read(&path)? == b"original");
         Ok(())
     }
