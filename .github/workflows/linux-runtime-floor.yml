@@ -1,0 +1,67 @@
+name: Qualify Linux installers with the shipped glibc minimum
+on:
+  push:
+    branches: [qualification/5-desktop]
+    paths: [.github/workflows/linux-runtime-floor.yml]
+permissions:
+  contents: read
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: OpenCoven/coven
+          ref: 6855b5a4b0b26f08bd711d302ffc8534b27ebea2
+          path: consumer
+          persist-credentials: false
+      - name: Build the native consumer against glibc 2.34
+        working-directory: consumer
+        run: |
+          sed -i 's/65927dd5e64d732cb99926bed66492994acdcec5/22f802e76e0c944707bb0dd3b14716916c091f95/g' crates/coven-cli/Cargo.toml Cargo.lock
+          git add crates/coven-cli/Cargo.toml Cargo.lock
+          test "$(git write-tree)" = d30e4742a9e3fbca2c03f96a4697dfe895687e60
+          toolchain=$(rustc --print sysroot)
+          docker run --rm -v "$PWD:/src" -v "$toolchain:/opt/rust:ro" -w /src \
+            almalinux@sha256:02df05719ef287ebd0df0a1eedb9172a00bd70703aed7b25660e426b8e0d6047 bash -ceu '
+              dnf install -y gcc gcc-c++ git make openssl-devel perl perl-IPC-Cmd cmake pkgconf-pkg-config
+              export PATH="/opt/rust/bin:$PATH" COVEN_BUILD_VERSION=v0.1.2-qualification.24
+              git config --global --add safe.directory /src
+              getconf GNU_LIBC_VERSION
+              cargo build --locked --release -p coven-cli
+            '
+      - name: Verify the native payload, package it and enforce the existing Linux runtime floor
+        run: |
+          native="$PWD/consumer/target/release/coven"
+          python3 tests/installed_deletion.py "$native"
+          python3 installer/linux/build.py --arch "${{ matrix.arch }}" --native "$native" --sha256 "$(sha256sum "$native" | cut -d' ' -f1)" --coven-license consumer/LICENSE --out assets
+          tar xOf assets/*.tar.gz 'Coven Host/platform.json' | python3 -c 'import json,sys; v=json.load(sys.stdin)["glibc"]; print("Required glibc", v); assert tuple(map(int, v.split("."))) <= (2, 34)'
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: glibc234-linux-${{ matrix.arch }}
+          path: assets/
+          retention-days: 14
+      - name: Exercise the installed desktop and report startup diagnostics
+        run: |
+          sudo dpkg -i assets/*.deb
+          sudo useradd -m -s /bin/bash coven-test
+          test "$(findmnt -T /home/coven-test -no FSTYPE)" = ext4
+          sudo install -m 755 installer/linux/check-installed.py tests/installed_deletion.py /tmp/
+          if ! sudo -i -u coven-test python3 /tmp/check-installed.py --disposable-account coven-test --launcher /usr/bin/coven-host-desktop --app /usr/lib/coven-host-desktop; then
+            sudo -i -u coven-test cat /home/coven-test/.local/state/coven-host-support/last-error.txt || true
+            exit 1
+          fi
+          sudo -i -u coven-test python3 /tmp/installed_deletion.py /usr/lib/coven-host-desktop/coven
+          sha256sum assets/*
