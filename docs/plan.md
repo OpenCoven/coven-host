@@ -6,7 +6,7 @@ The MVP connects one ordinary folder and one authenticated peer. Its acceptance 
 
 Version 0.1.1 is the distributed desktop installer. The 0.1.2 candidate adds recoverable deletion and rename to the installed Castle folder. The Host correction, consumer pin and installer updates have separate review heads. [Host #24](https://github.com/OpenCoven/coven-host/pull/24) · [Coven #1815](https://github.com/OpenCoven/coven/pull/1815) · [Installer #26](https://github.com/OpenCoven/coven-host/pull/26)
 
-The corrected Host revision passed the historical Linux suite and installed macOS checks, including upgrading a downloaded v0.1.1 installation. The installed Mac CLI also reconnected to an ARM64 Linux peer over SSH after a tunnel outage and peer restart. Native Windows NTFS and Linux desktop results belong on the same delivery record. Record the final consumer SHA, release asset hashes and downloaded-installer journeys there before advancing the distributed version. [Platform and SSH receipts](https://github.com/OpenCoven/coven-host/issues/20)
+The corrected Host revision passed the historical Linux suite and installed macOS checks, including upgrading a downloaded v0.1.1 installation. The installed Mac CLI also reconnected to an ARM64 Linux peer over SSH after a tunnel outage and peer restart. Native Windows x64/NTFS passed the held-open file scenario. Both native Linux architectures passed installed qualification, including builds at the published glibc 2.34 minimum. The remaining delivery gates are review, the final consumer pin, signed distribution, and repeating both recovery journeys from the published installer. [Platform and SSH receipts](https://github.com/OpenCoven/coven-host/issues/20)
 
 ## Milestones
 
