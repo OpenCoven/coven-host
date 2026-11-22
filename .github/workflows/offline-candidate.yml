@@ -1,0 +1,71 @@
+name: Assemble and exercise the offline desktop candidate
+on:
+  push:
+    branches: [qualification/5-desktop]
+    paths: [.github/workflows/offline-candidate.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  kit:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          run-id: 45001601864
+          artifact-ids: 14745918824
+          github-token: ${{ github.token }}
+          path: inputs/mac
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          run-id: 45002200004
+          artifact-ids: 14746622077,14745974662
+          github-token: ${{ github.token }}
+          path: inputs/linux
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          run-id: 45002668409
+          artifact-ids: 14746781637
+          github-token: ${{ github.token }}
+          path: inputs/windows
+      - name: Assemble all six desktop downloads using the verified native payloads
+        run: |
+          mkdir assets
+          cp "$(find inputs/mac -name 'Coven-Host-0.1.2-macOS.zip')" assets/
+          cp "$(find inputs/windows -name 'Coven-Host-0.1.2-Windows-x64.exe')" assets/
+          for arch in amd64 arm64; do
+            pkg=$(find inputs/linux -name "Coven-Host-0.1.2-linux-$arch.deb")
+            test -n "$pkg"
+            base=$(dirname "$pkg")
+            tar xOf "$base"/*.tar.gz 'Coven Host/coven' > "$RUNNER_TEMP/coven-$arch"
+            tar xOf "$base"/*.tar.gz 'Coven Host/LICENSE' > "$RUNNER_TEMP/consumer-license"
+            expected=$(tar xOf "$base"/*.tar.gz 'Coven Host/platform.json' | python3 -c 'import json,sys; m=json.load(sys.stdin); assert tuple(map(int,m["glibc"].split("."))) <= (2,34); print(m["sha256"])')
+            python3 installer/linux/build.py --arch "$arch" --native "$RUNNER_TEMP/coven-$arch" --sha256 "$expected" --coven-license "$RUNNER_TEMP/consumer-license" --out assets
+          done
+          python3 installer/package-offline.py assets
+          cp installer/Start-Here.html assets/
+          (cd assets && shasum -a 256 -- * > ../SHA256SUMS)
+          cp SHA256SUMS assets/
+          cat SHA256SUMS
+      - name: Open the Mac installer from the verified offline kit and replay both journeys
+        run: |
+          mkdir opened
+          ditto -x -k assets/Coven-Host-0.1.2-Offline.zip opened
+          manifest=$(find opened -name SHA256SUMS)
+          (cd "$(dirname "$manifest")" && shasum -a 256 -c SHA256SUMS)
+          zip=$(find opened -name 'Coven-Host-0.1.2-macOS.zip')
+          ditto -x -k "$zip" "$RUNNER_TEMP/offline-app"
+          app="$RUNNER_TEMP/offline-app/Coven Host.app"
+          xcrun lipo "$app/Contents/MacOS/CovenHostSetup" -verify_arch arm64 x86_64
+          codesign --verify --deep --all-architectures --strict "$app"
+          xcrun swiftc installer/macos/Installer.swift installer/macos/Verify.swift -o "$RUNNER_TEMP/verify"
+          python3 installer/macos/verify.py "$app" "$RUNNER_TEMP/verify" --deletions
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: staged-desktop-offline-kit
+          path: assets/
+          retention-days: 14
