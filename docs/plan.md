@@ -2,6 +2,12 @@
 
 The MVP connects one ordinary folder and one authenticated peer. Its acceptance condition is an installed Coven CLI and production daemon completing offline sync and recovery on macOS/APFS, Linux/ext4 and Windows/NTFS, followed by a successful SSH disconnect, peer restart and reconciliation. Coven Host owns the Rust client library and peer. Coven owns the Rust CLI and daemon. The historical Python revision supplies compatibility fixtures only.
 
+## Offline deletion and rename release
+
+Version 0.1.1 is the distributed desktop installer. The 0.1.2 candidate adds recoverable deletion and rename to the installed Castle folder. The Host correction, consumer pin and installer updates have separate review heads. [Host #24](https://github.com/OpenCoven/coven-host/pull/24) · [Coven #1815](https://github.com/OpenCoven/coven/pull/1815) · [Installer #26](https://github.com/OpenCoven/coven-host/pull/26)
+
+The corrected Host revision passed the historical Linux suite and installed macOS checks, including upgrading a downloaded v0.1.1 installation. The installed Mac CLI also reconnected to an ARM64 Linux peer over SSH after a tunnel outage and peer restart. Native Windows NTFS and Linux desktop results belong on the same delivery record. Record the final consumer SHA, release asset hashes and downloaded-installer journeys there before advancing the distributed version. [Platform and SSH receipts](https://github.com/OpenCoven/coven-host/issues/20)
+
 ## Milestones
 
 | Deliverable | Owner | State on 2026-11-20 | Completion evidence or next gate |
