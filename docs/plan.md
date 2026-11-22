@@ -10,6 +10,8 @@ Coven `8fb558c60b006b337bf7850e6e43e0793b788097` pins reviewed Host `247904def96
 
 Two installed Castle folders also exchanged an offline rename in both directions. When one folder deleted a file and the other edited it, choosing the edit restored identical bytes in both folders at peer revision 3. The receiving client retained the old path under `previousVersions`. The downloaded Mac candidate also retried a deletion after a lost acknowledgement and refused to resurrect a file after a peer rollback. [Offline kit hashes](https://github.com/OpenCoven/coven-host/issues/5#issuecomment-7076674853) · [Installed two-folder checks on Linux and Windows](https://github.com/OpenCoven/coven-host/actions/runs/45004210827)
 
+The subsequent NTFS review moved the owner check ahead of the permission change when retaining a document. Host `c39e4474be545ae64fdb6bc88bcfa7e3443286be` includes that correction. Coven #1815 tracks the matching manifest and lockfile update. Qualify that pair and record the installed package digests on #20 before publishing. [Consumer pin review](https://github.com/OpenCoven/coven/pull/1815#pullrequestreview-6011621605) · [Native ownership regression](https://github.com/OpenCoven/coven-host/actions/runs/45010801167)
+
 ## Milestones
 
 | Deliverable | Owner | State on 2026-11-20 | Completion evidence or next gate |
