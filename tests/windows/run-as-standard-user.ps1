@@ -17,10 +17,13 @@ try {
     $python = (Get-Command python.exe).Source
     $report = Join-Path $fixture 'result.txt'
     $taskScript = Join-Path $fixture 'run.ps1'
+    $exitFile = Join-Path $fixture 'exit.txt'
     @(
         "Set-Location '$fixture'",
         "& '$python' -u 'qualify-installer.py' 'setup.exe' *> '$report'",
-        'exit $LASTEXITCODE'
+        '$result = $LASTEXITCODE',
+        ("Set-Content -LiteralPath '{0}' -Value `$result" -f $exitFile),
+        'exit $result'
     ) | Set-Content -LiteralPath $taskScript
     & icacls.exe $fixture /grant "${identity}:(OI)(CI)(M)" | Out-Null
     if ($LASTEXITCODE) { throw 'Could not grant the disposable test account access to its fixture' }
@@ -33,10 +36,14 @@ try {
         Start-Sleep -Seconds 2
         $state = (Get-ScheduledTask -TaskName $name).State
         $info = Get-ScheduledTaskInfo -TaskName $name
-    } while (($state -eq 'Running' -or $info.LastRunTime.Year -lt 2000) -and (Get-Date) -lt $deadline)
+    } while (!(Test-Path -LiteralPath $exitFile) -and ($state -eq 'Running' -or $info.LastRunTime.Year -lt 2000) -and (Get-Date) -lt $deadline)
     if (Test-Path -LiteralPath $report) { Get-Content -LiteralPath $report }
-    if ($state -eq 'Running' -or $info.LastTaskResult -ne 0 -or !(Test-Path -LiteralPath $report)) { throw "Disposable-account verification failed with task result $($info.LastTaskResult)" }
+    # Task Scheduler can keep tracking descendant services after the verification process exits.
+    if (!(Test-Path -LiteralPath $exitFile) -or (Get-Content -LiteralPath $exitFile -Raw).Trim() -ne '0') { throw "Disposable-account verification failed with task result $($info.LastTaskResult)" }
 } finally {
-    if ($taskCreated) { Unregister-ScheduledTask -TaskName $name -Confirm:$false }
+    if ($taskCreated) {
+        Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue
+        Unregister-ScheduledTask -TaskName $name -Confirm:$false
+    }
     if ($userCreated) { Remove-LocalUser -Name $name }
 }
