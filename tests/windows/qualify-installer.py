@@ -6,8 +6,39 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 
 from installed_deletion import exercise, until
+
+
+def wait_for_install(launcher, ready):
+    # Read only the sanitized report field in the installer window belonging to this fresh account.
+    script = r"""Add-Type -AssemblyName UIAutomationClient
+$p = Get-Process -Id $env:QA_SETUP_PID -ErrorAction Stop
+if ($p.MainWindowHandle -ne 0) {
+    $form = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
+    $condition = New-Object System.Windows.Automation.PropertyCondition(
+        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+        [System.Windows.Automation.ControlType]::Edit)
+    foreach ($edit in $form.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
+        $value = $null
+        if ($edit.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$value)) {
+            $text = $value.Current.Value
+            if ($text.StartsWith('Coven Host setup diagnostic')) { Write-Output $text }
+        }
+    }
+}"""
+    end = time.monotonic() + 120
+    while not ready() and time.monotonic() < end:
+        if launcher.poll() is not None:
+            raise RuntimeError(f"The installer exited with code {launcher.returncode}")
+        observation = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True,
+                                     text=True, timeout=15, env=dict(os.environ, QA_SETUP_PID=str(launcher.pid)))
+        if observation.stdout.startswith("Coven Host setup diagnostic"):
+            raise RuntimeError(observation.stdout.strip())
+        time.sleep(1)
+    if not ready():
+        raise RuntimeError("The installer did not publish its watcher process record within 120 seconds")
 
 
 def main():
@@ -23,7 +54,7 @@ def main():
     cli = app / "0.1.2/coven.exe"
     launcher = subprocess.Popen([package])
     try:
-        until(lambda: (app / "local-peer/watch.pid").is_file() and cli.is_file())
+        wait_for_install(launcher, lambda: (app / "local-peer/watch.pid").is_file() and cli.is_file())
         def online():
             p = subprocess.run([cli, "host", "status"], capture_output=True, timeout=15)
             if p.returncode:
