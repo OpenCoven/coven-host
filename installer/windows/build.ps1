@@ -2,15 +2,18 @@
 param(
     [Parameter(Mandatory=$true)][string]$Package,
     [Parameter(Mandatory=$true)][string]$OutputDirectory,
+    [Parameter(Mandatory=$true)][string]$CovenLicense,
     [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$PackageSha256,
     [Parameter(Mandatory=$true)][ValidatePattern('^[0-9a-fA-F]{64}$')][string]$CliSha256
 )
 $ErrorActionPreference = 'Stop'
+$cliLicense = (Resolve-Path -LiteralPath $CovenLicense).ProviderPath
+$hostLicense = (Resolve-Path -LiteralPath "$PSScriptRoot\..\..\LICENSE").ProviderPath
 $archive = (Resolve-Path -LiteralPath $Package).ProviderPath
 if ((Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash -ne $PackageSha256) { throw 'Unexpected Windows package SHA-256' }
 $work = New-Item -ItemType Directory -Path (Join-Path $env:TEMP ([guid]::NewGuid()))
 try {
-    & tar.exe xf $archive -C $work.FullName package/bin/coven.exe package/LICENSE package/LICENSE-COVEN-HOST
+    & tar.exe xf $archive -C $work.FullName package/bin/coven.exe
     if ($LASTEXITCODE) { throw 'Package extraction failed' }
     $cli = Join-Path $work.FullName 'package/bin/coven.exe'
     if ((Get-FileHash -Algorithm SHA256 -LiteralPath $cli).Hash -ne $CliSha256) { throw 'Unexpected CLI SHA-256' }
@@ -27,7 +30,7 @@ try {
     $payloadSource = Join-Path $work.FullName 'QualifiedPayload.cs'
     [IO.File]::WriteAllText($payloadSource, ('internal static class QualifiedPayload {{ internal const string Sha256 = "{0}"; }}' -f $CliSha256.ToLowerInvariant()))
     $compiler = Join-Path $env:WINDIR 'Microsoft.NET\Framework\v4.0.30319\csc.exe'
-    & $compiler /nologo /target:winexe /platform:anycpu /optimize+ "/win32manifest:$PSScriptRoot\app.manifest" "/out:$out" "/resource:$compressed,cli.gz" "/resource:$work\package\LICENSE,license-cli.txt" "/resource:$work\package\LICENSE-COVEN-HOST,license-host.txt" /reference:System.Windows.Forms.dll /reference:System.Management.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll /reference:Microsoft.CSharp.dll "$PSScriptRoot\Setup.cs" "$payloadSource"
+    & $compiler /nologo /target:winexe /platform:anycpu /optimize+ "/win32manifest:$PSScriptRoot\app.manifest" "/out:$out" "/resource:$compressed,cli.gz" "/resource:$cliLicense,license-cli.txt" "/resource:$hostLicense,license-host.txt" /reference:System.Windows.Forms.dll /reference:System.Management.dll /reference:System.Drawing.dll /reference:System.Web.Extensions.dll /reference:Microsoft.CSharp.dll "$PSScriptRoot\Setup.cs" "$payloadSource"
     if ($LASTEXITCODE) { throw 'Compilation failed' }
     Get-FileHash -Algorithm SHA256 -LiteralPath $out
 } finally { Remove-Item -Recurse -Force -LiteralPath $work.FullName }

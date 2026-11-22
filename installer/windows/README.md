@@ -10,10 +10,10 @@ If setup reports a problem, follow the next step in the window. **Copy report** 
 
 ## Build
 
-Use a Windows 11 build machine with its inbox Windows PowerShell, .NET Framework 4.x compiler and tar.exe. Supply the Windows x64 CLI package built from the reviewed consumer SHA. Take the archive and executable SHA-256 values from its installed qualification receipt. In a PowerShell session authorized to run your reviewed build sources, run the build from this directory.
+Use a Windows 11 build machine with its inbox Windows PowerShell, .NET Framework 4.x compiler and tar.exe. Supply the Windows x64 CLI package built from the reviewed consumer SHA. Take the archive and executable SHA-256 values from its installed qualification receipt. Use the LICENSE file from the same Coven source revision. In a PowerShell session authorized to run your reviewed build sources, run the build from this directory.
 
 ```powershell
-.\build.ps1 -Package $Package -OutputDirectory $OutputDirectory -PackageSha256 $ArchiveHash -CliSha256 $ExecutableHash
+.\build.ps1 -Package $Package -OutputDirectory $OutputDirectory -CovenLicense $ConsumerLicense -PackageSha256 $ArchiveHash -CliSha256 $ExecutableHash
 ```
 
 The build verifies both the source archive and the extracted executable against the supplied qualification digests. It embeds the compressed executable and both licenses in `Coven-Host-0.1.2-Windows-x64.exe`. The installer verifies the executable digest before installing it and at setup or sign-in. The .NET Framework compiler adds build-specific PE metadata. Record the SHA-256 of the final distributable after any authorized signing. The build command produces an unsigned EXE.
