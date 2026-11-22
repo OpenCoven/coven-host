@@ -29,8 +29,9 @@ jobs:
           $module = (Resolve-Path tests).Path
           $env:PYTHONPATH = $module
           $env:CONTROL_CLI = (Resolve-Path package/bin/coven.exe).Path
-          $env:CONTROL_ROOT = Join-Path $env:RUNNER_TEMP 'acl-control'
-          New-Item -ItemType Directory $env:CONTROL_ROOT | Out-Null
+          $env:CONTROL_ROOT = python -c "import tempfile; from pathlib import Path; print(Path(tempfile.mkdtemp(prefix='castle-delete-')).resolve())"
+          $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+          Write-Output "Token defaults to current owner: $($identity.User -eq $identity.Owner)"
           python -c "import os; from pathlib import Path; from installed_deletion import exercise; exercise(Path(os.environ['CONTROL_CLI']),Path(os.environ['CONTROL_ROOT']))"
           $result = $LASTEXITCODE
           $current = [Security.Principal.WindowsIdentity]::GetCurrent().User
