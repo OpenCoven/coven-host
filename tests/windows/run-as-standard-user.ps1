@@ -1,5 +1,5 @@
 # Run only on a disposable Windows Actions host. The account and process belong to this run.
-param([Parameter(Mandatory=$true)][string]$Installer)
+param([Parameter(Mandatory=$true)][string]$Installer, [string]$PreviousInstaller)
 $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows') { throw 'A disposable Windows Actions runner is required' }
 $name = 'CovenQA' + [Guid]::NewGuid().ToString('N').Substring(0,8)
@@ -18,13 +18,18 @@ try {
     $null = New-Item -Type Directory $fixture
     Copy-Item -LiteralPath $Installer -Destination (Join-Path $fixture 'setup.exe')
     Copy-Item -LiteralPath "$PSScriptRoot\qualify-installer.py","$PSScriptRoot\..\installed_deletion.py" -Destination $fixture
+    $previousArgument = ''
+    if ($PreviousInstaller) {
+        Copy-Item -LiteralPath $PreviousInstaller -Destination (Join-Path $fixture 'previous.exe')
+        $previousArgument = " 'previous.exe'"
+    }
     $python = (Get-Command python.exe).Source
     $report = Join-Path $fixture 'result.txt'
     $taskScript = Join-Path $fixture 'run.ps1'
     $exitFile = Join-Path $fixture 'exit.txt'
     @(
         "Set-Location '$fixture'",
-        "& '$python' -u 'qualify-installer.py' 'setup.exe' *> '$report'",
+        "& '$python' -u 'qualify-installer.py' 'setup.exe'$previousArgument *> '$report'",
         '$result = $LASTEXITCODE',
         ("Set-Content -LiteralPath '{0}' -Value `$result" -f $exitFile),
         'exit $result'
