@@ -65,6 +65,14 @@ internal sealed class Setup
         Step("CH-W01", "Open setup", "Close another Coven Host setup window, then select Retry.");
         try
         {
+            using (var identity = WindowsIdentity.GetCurrent())
+            {
+                if (identity.Owner != identity.User)
+                {
+                    Step("CH-W12", "Check the Windows account", "Close this window and open the installer from File Explorer in your regular Windows session. If the message returns, ask your Windows administrator for a session that creates files owned by your account.");
+                    Fail("This Windows session assigns newly created files to a group. Private recovery files require your account as their owner.");
+                }
+            }
             using (var guard = new Mutex(false, @"Local\OpenCoven.Host.Setup." + WindowsIdentity.GetCurrent().User.Value))
             {
                 bool held;

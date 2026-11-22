@@ -4,6 +4,8 @@ Open the Windows x64 EXE from the private release. Windows 11 on ARM64 can run i
 
 Open **Coven Host** in Start to check sync or restart stopped processes. The application reuses the configured folder, peer, access token and database. A fresh configuration uses a private peer on an available IPv4 loopback port. To synchronize with another machine, follow the [SSH instructions](../../docs/operations.md#connect-through-ssh) with the installed CLI. A subsequent launch recognizes an existing configured remote. Setup registers a sign-in entry named **OpenCovenHost**. Windows Startup Apps settings control whether it runs at login.
 
+If setup reports CH-W12, Windows is creating files with a group as their owner. Open the installer from File Explorer in your regular signed-in session so that your account owns its private recovery files.
+
 If setup reports CH-W11 after updating from v0.1.1, save your work, sign out of Windows, and sign back in. The registered launcher reopens the original folder and peer with the new executable.
 
 The versioned executables and license texts live in `%LOCALAPPDATA%\OpenCoven\Coven Host\0.1.2`. The sibling `local-peer` directory holds the token, port, process records and peer database. The token inherits an ACL granting access only to the current user. The production daemon manages its existing profile, folder state and peer identity pin. Keep backups of the peer and client state with their respective processes stopped, as described in the [operator guide](../../docs/operations.md).

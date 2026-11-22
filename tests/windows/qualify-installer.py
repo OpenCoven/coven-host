@@ -58,6 +58,28 @@ $p.WaitForExit()
 
 
 def main():
+    if sys.argv[1:2] == ["--group-owned"]:
+        if os.name != "nt" or os.environ.get("GITHUB_ACTIONS") != "true":
+            raise RuntimeError("Run this check on the disposable Windows runner")
+        owner = subprocess.check_output(["powershell.exe", "-NoProfile", "-Command",
+            "$i = [Security.Principal.WindowsIdentity]::GetCurrent(); $i.Owner -eq $i.User"], text=True).strip()
+        if owner != "False":
+            raise RuntimeError("The negative control needs a group-owned Windows token")
+        application = Path(os.environ["LOCALAPPDATA"]) / "OpenCoven/Coven Host"
+        root = Path.home() / "Coven"
+        assert not application.exists() and not root.exists()
+        with subprocess.Popen([Path(sys.argv[2]).resolve(strict=True)]) as launcher:
+            try:
+                wait_for_install(launcher, lambda: False)
+            except RuntimeError as exc:
+                text = str(exc)
+                if "Code: CH-W12" not in text or "File Explorer" not in text:
+                    raise
+            finally:
+                launcher.terminate()
+        assert not application.exists() and not root.exists()
+        print("PASS group-owned Windows session displayed CH-W12 before creating installation or recovery files")
+        return
     if os.name != "nt" or not re.fullmatch(r"CovenQA[0-9a-f]{8}", os.environ["USERNAME"]):
         raise RuntimeError("Run in the disposable Windows qualification account")
     if "S-1-16-8192" not in subprocess.check_output(["whoami", "/groups"], text=True):
