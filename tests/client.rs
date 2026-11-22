@@ -142,6 +142,53 @@ fn legacy_profile_requires_explicit_selection_before_adoption() {
     profile.initialize(&root).unwrap();
     let shared_state = Client::for_profile(&state, &base.join("other"));
     assert!(shared_state.initialize(&root).is_err());
-    assert!(shared_state.status().is_err());
+    let db = rusqlite::Connection::open(state.join("client.sqlite")).unwrap();
+    db.execute_batch("DROP TABLE deleted_baseline; DROP TABLE pending_delete;")
+        .unwrap();
+    assert!(
+        shared_state
+            .status()
+            .unwrap_err()
+            .to_string()
+            .contains("different daemon profile")
+    );
+    let deletion_tables: i64 = db.query_row(
+        "SELECT COUNT(*) FROM sqlite_schema WHERE name IN ('deleted_baseline','pending_delete')",
+        [],
+        |row| row.get(0),
+    ).unwrap();
+    assert_eq!(
+        deletion_tables, 0,
+        "refused profile migrated the owner's state"
+    );
     profile.status().unwrap();
+}
+
+#[test]
+fn offline_reopen_adds_deletion_tables_and_reports_outstanding_receipt() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("Castle");
+    let state = base.join("state");
+    let client = Client::new(&state);
+    client.initialize(&root).unwrap();
+    let db = rusqlite::Connection::open(state.join("client.sqlite")).unwrap();
+    db.execute_batch("DROP TABLE deleted_baseline; DROP TABLE pending_delete;")
+        .unwrap();
+    db.execute(
+        "INSERT INTO baseline VALUES (?1,1,?2)",
+        ("files/old", coven_host::digest(b"old")),
+    )
+    .unwrap();
+    let reopened = Client::new(&state);
+    assert_eq!(reopened.status().unwrap()["pendingPaths"], 1);
+    db.execute(
+        "INSERT INTO pending_delete VALUES (1,'files/old',1,?1)",
+        ["1234567890abcdef1234567890abcdef"],
+    )
+    .unwrap();
+    let status = reopened.status().unwrap();
+    assert_eq!(status["awaitingAcknowledgement"], "files/old");
+    assert_eq!(status["pendingPaths"], 1);
+    assert!(!root.join("Castles/demo/files/old").exists());
 }
