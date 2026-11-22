@@ -14,17 +14,32 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: OpenCoven/coven
+          ref: 6855b5a4b0b26f08bd711d302ffc8534b27ebea2
+          sparse-checkout: LICENSE
+          sparse-checkout-cone-mode: false
+          path: consumer
+          persist-credentials: false
       - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
         with:
-          run-id: 45000933880
-          artifact-ids: 14745379239
+          run-id: 44998995286
+          artifact-ids: 14745576289
           github-token: ${{ github.token }}
-          path: assets
-      - name: Verify the exact desktop executable downloaded from the original qualification
+          path: packages
+      - name: Build the native desktop installer around the retained qualification binary
         shell: pwsh
         run: |
-          $installer = @(Get-ChildItem assets -Recurse -Filter '*.exe')
-          if ($installer.Count -ne 1 -or (Get-FileHash $installer[0].FullName).Hash -ne '601285F7F5486C50C0001EA7D6B47B6D753688EAB93B96AC113870917BB9EB70') { throw 'Installer SHA-256 mismatch' }
+          $packages = @(Get-ChildItem packages -Recurse -Filter '*cli-windows-*.tgz')
+          if ($packages.Count -ne 1) { throw 'Expected the qualified x64 native package' }
+          & ./installer/windows/build.ps1 -Package $packages[0].FullName -OutputDirectory assets -CovenLicense consumer/LICENSE -PackageSha256 39eb7168dd6fcaedbdcf88b225858bea04b4ac54b41a4d3b672e7b179e6d83ad -CliSha256 bee722f49bfbcb9e24adbeb9cb793c2cbfe67d110680eaf217833f2fdb1e91bb
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: windows-x64-installer
+          path: assets/*.exe
+          if-no-files-found: error
+          retention-days: 14
       - name: Install as a standard user on native Windows x64 and NTFS
         shell: powershell
         run: |
@@ -33,4 +48,14 @@ jobs:
           if ("$arch" -ne 'X64' -or $volume.FileSystem -ne 'NTFS') { throw 'Windows x64 and NTFS required' }
           Get-CimInstance Win32_OperatingSystem | Select-Object Caption, BuildNumber, OSArchitecture
           Write-Output "Hosted VM, native $arch, $($volume.FileSystem)"
-          ./tests/windows/run-as-standard-user.ps1 (Get-ChildItem assets -Recurse -Filter *.exe).FullName
+          ./tests/windows/run-as-standard-user.ps1 (Resolve-Path assets/*.exe)
+      - name: Upgrade the released Windows installation with its original folder
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: pwsh
+        run: |
+          gh release download v0.1.1 --repo OpenCoven/coven-host --pattern 'Coven-Host-0.1.1-Windows-x64.exe' -D previous
+          $previous = (Resolve-Path previous/*.exe).Path
+          if ((Get-FileHash $previous).Hash -ne 'FA5B2D763805ED73BD82130654E3456596AC26388BD762400916CAD92CD655A2') { throw 'Previous release digest mismatch' }
+          & powershell.exe -NoProfile -File ./tests/windows/run-as-standard-user.ps1 -Installer (Resolve-Path assets/*.exe).Path -PreviousInstaller $previous
+          if ($LASTEXITCODE) { throw 'The existing-profile upgrade failed' }
