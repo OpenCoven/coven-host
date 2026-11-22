@@ -11,34 +11,60 @@ import time
 from installed_deletion import exercise, until
 
 
+def diagnostic_text(pid):
+    # Read the rendered WinForms edit control in this disposable installer's own process.
+    import ctypes
+    from ctypes import wintypes
+
+    user32 = ctypes.windll.user32
+    callback = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+    user32.EnumWindows.argtypes = [callback, wintypes.LPARAM]
+    user32.EnumChildWindows.argtypes = [wintypes.HWND, callback, wintypes.LPARAM]
+    user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
+    user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+    user32.SendMessageTimeoutW.argtypes = [
+        wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
+        wintypes.UINT, wintypes.UINT, ctypes.POINTER(ctypes.c_size_t),
+    ]
+    reports = []
+
+    @callback
+    def child(hwnd, _):
+        name = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(hwnd, name, len(name))
+        if "edit" in name.value.lower():
+            text = ctypes.create_unicode_buffer(4096)
+            copied = ctypes.c_size_t()
+            # WM_GETTEXT is marshalled by Windows across the process boundary.
+            if user32.SendMessageTimeoutW(hwnd, 0x000D, len(text), ctypes.addressof(text),
+                                          2, 1000, ctypes.byref(copied)):
+                if text.value.startswith("Coven Host setup diagnostic"):
+                    reports.append(text.value)
+        return True
+
+    @callback
+    def window(hwnd, _):
+        owner = wintypes.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(owner))
+        if owner.value == pid:
+            user32.EnumChildWindows(hwnd, child, 0)
+        return True
+
+    user32.EnumWindows(window, 0)
+    return next(iter(reports), None)
+
+
 def wait_for_install(launcher, ready):
-    # Read only the sanitized report field in the installer window belonging to this fresh account.
-    script = r"""Add-Type -AssemblyName UIAutomationClient
-$p = Get-Process -Id $env:QA_SETUP_PID -ErrorAction Stop
-if ($p.MainWindowHandle -ne 0) {
-    $form = [System.Windows.Automation.AutomationElement]::FromHandle($p.MainWindowHandle)
-    $condition = New-Object System.Windows.Automation.PropertyCondition(
-        [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
-        [System.Windows.Automation.ControlType]::Edit)
-    foreach ($edit in $form.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condition)) {
-        $value = $null
-        if ($edit.TryGetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern, [ref]$value)) {
-            $text = $value.Current.Value
-            if ($text.StartsWith('Coven Host setup diagnostic')) { Write-Output $text }
-        }
-    }
-}"""
     end = time.monotonic() + 120
     while not ready() and time.monotonic() < end:
         if launcher.poll() is not None:
             raise RuntimeError(f"The installer exited with code {launcher.returncode}")
-        observation = subprocess.run(["powershell.exe", "-NoProfile", "-Command", script], capture_output=True,
-                                     text=True, timeout=15, env=dict(os.environ, QA_SETUP_PID=str(launcher.pid)))
-        if observation.stdout.startswith("Coven Host setup diagnostic"):
-            raise RuntimeError(observation.stdout.strip())
-        time.sleep(1)
+        report = diagnostic_text(launcher.pid)
+        if report:
+            raise RuntimeError(report)
+        time.sleep(0.5)
     if not ready():
-        raise RuntimeError("The installer did not publish its watcher process record within 120 seconds")
+        raise RuntimeError("The installer did not display a diagnostic or start its watcher within 120 seconds")
 
 
 def stop_registered(cli, state):
