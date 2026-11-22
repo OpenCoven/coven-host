@@ -7,7 +7,7 @@ fn parents(path: &str) -> impl Iterator<Item = &str> {
 }
 
 impl Client {
-    fn flush_pending_delete(&self, db: &Connection, remote: &Peer) -> Result<()> {
+    fn flush_pending_delete(&self, db: &Connection, remote: &Peer) -> Result<Option<String>> {
         let pending = db
             .query_row(
                 "SELECT path,expected,operation FROM pending_delete WHERE slot=1",
@@ -33,13 +33,19 @@ impl Client {
                     tx.execute("DELETE FROM pending_delete", [])?;
                     tx.commit()?;
                 }
-                Err(e) if peer::is_precondition(&e) => {
+                Err(e) if peer::is_write_rejected(&e) => {
+                    // A definite rejection leaves the peer file and the baseline intact.
                     db.execute("DELETE FROM pending_delete", [])?;
+                    if !peer::is_precondition(&e) {
+                        return Ok(Some(format!(
+                            "{path}: peer refused deletion ({e:#}); remote copy preserved"
+                        )));
+                    }
                 }
                 Err(e) => return Err(e),
             }
         }
-        Ok(())
+        Ok(None)
     }
 
     fn flush_pending(&self, db: &Connection, remote: &Peer) -> Result<Option<String>> {
@@ -127,8 +133,11 @@ impl Client {
         let conflicts = conflicts(db)?;
         let initial = self.inventory(db, &mut remote)?;
         check_history(db, &baseline(db)?, &conflicts, &initial, &remote)?;
-        self.flush_pending_delete(db, &remote)?;
-        let mut errors: Vec<_> = self.flush_pending(db, &remote)?.into_iter().collect();
+        let mut errors: Vec<_> = self
+            .flush_pending_delete(db, &remote)?
+            .into_iter()
+            .collect();
+        errors.extend(self.flush_pending(db, &remote)?);
         let items = self.inventory(db, &mut remote)?;
         let base = baseline(db)?;
         check_history(db, &base, &conflicts, &items, &remote)?;
@@ -200,7 +209,7 @@ impl Client {
                         "INSERT INTO pending_delete VALUES (1,?,?,?)",
                         params![path, rev, Uuid::new_v4().simple().to_string()],
                     )?;
-                    self.flush_pending_delete(db, &remote)?;
+                    errors.extend(self.flush_pending_delete(db, &remote)?);
                 }
                 continue;
             }
@@ -315,7 +324,7 @@ fn read_matching(folder: &Folder, path: &str, sha: &str) -> Result<Vec<u8>> {
     Ok(data)
 }
 
-fn download_fits(scan: &Scan, path: &str, size: usize) -> bool {
+pub(super) fn download_fits(scan: &Scan, path: &str, size: usize) -> bool {
     let count = scan.files.len() + usize::from(!scan.files.contains_key(path));
     let new_dirs = parents(path)
         .filter(|p| !scan.directories.contains(*p))

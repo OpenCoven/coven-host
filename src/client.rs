@@ -382,10 +382,7 @@ impl Client {
             if selected != local {
                 if let Some(data) = selected {
                     ensure!(
-                        scan.files.values().map(|(_, size)| size).sum::<usize>()
-                            - local.as_ref().map_or(0, Vec::len)
-                            + data.len()
-                            <= MAX_TOTAL,
+                        reconcile::download_fits(&scan, path, data.len()),
                         "resolution exceeds Castle storage limits"
                     );
                     folder.replace(path, &data, local_sha.as_deref())?;
