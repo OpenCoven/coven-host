@@ -22,16 +22,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
-        with:
-          artifact-ids: 14746392886
-          run-id: 45003418492
-          github-token: ${{ github.token }}
-          path: assets
+      - name: Download the published offline installer kit
+        shell: bash
+        run: |
+          mkdir assets
+          curl --fail --location --silent --show-error --retry 3 --output assets/Coven-Host-0.1.2-Offline.zip https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Offline.zip
       - name: Install Debian package from the offline kit and exercise recovery
         run: |
-          echo "a3fec3b01e0504203a4df44e2cff71d71c909a3773fc0a7a5727111edb96d279  assets/Coven-Host-0.1.2-Offline.zip" | sha256sum -c -
-          (cd assets && sha256sum -c SHA256SUMS)
+          echo "b84a78c1475dfd8e8969fa441c5d71e4435a4ce8c8b11065cb98bb542919e4bf  assets/Coven-Host-0.1.2-Offline.zip" | sha256sum -c -
           unzip -q assets/Coven-Host-0.1.2-Offline.zip -d opened
           manifest=$(find opened -name SHA256SUMS)
           (cd "$(dirname "$manifest")" && sha256sum -c SHA256SUMS)
@@ -51,23 +49,26 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
-        with:
-          artifact-ids: 14746392886
-          run-id: 45003418492
-          github-token: ${{ github.token }}
-          path: assets
+      - name: Download the published offline installer kit
+        shell: bash
+        run: |
+          mkdir assets
+          curl --fail --location --silent --show-error --retry 3 --output assets/Coven-Host-0.1.2-Offline.zip https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Offline.zip
       - name: Verify the kit and extract the Windows installer
         shell: bash
         run: |
-          echo "a3fec3b01e0504203a4df44e2cff71d71c909a3773fc0a7a5727111edb96d279  assets/Coven-Host-0.1.2-Offline.zip" | sha256sum -c -
-          (cd assets && sha256sum -c SHA256SUMS)
+          echo "b84a78c1475dfd8e8969fa441c5d71e4435a4ce8c8b11065cb98bb542919e4bf  assets/Coven-Host-0.1.2-Offline.zip" | sha256sum -c -
           unzip -q assets/Coven-Host-0.1.2-Offline.zip -d opened
           manifest=$(find opened -name SHA256SUMS)
           (cd "$(dirname "$manifest")" && sha256sum -c SHA256SUMS)
+      - name: Download the published Windows upgrade baseline
+        shell: bash
+        run: |
+          curl --fail --location --silent --show-error --retry 3 --output previous.exe https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-Windows-x64.exe
+          echo "fa5b2d763805ed73bd82130654e3456596ac26388bd762400916cad92cd655a2  previous.exe" | sha256sum -c -
       - name: Exercise the GUI installation and NTFS file sharing
         shell: powershell
         run: |
           $installer = @(Get-ChildItem opened -Recurse -Filter '*.exe')
           if ($installer.Count -ne 1 -or (Get-Volume -DriveLetter $env:SystemDrive[0]).FileSystem -ne 'NTFS' -or $env:RUNNER_ARCH -ne 'X64') { throw 'Expected one x64 installer and NTFS' }
-          ./tests/windows/run-as-standard-user.ps1 -Installer $installer[0].FullName
+          ./tests/windows/run-as-standard-user.ps1 -Installer $installer[0].FullName -PreviousInstaller (Resolve-Path previous.exe).Path
