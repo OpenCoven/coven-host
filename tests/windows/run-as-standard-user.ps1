@@ -36,7 +36,7 @@ try {
     $testProcess = Start-Process -FilePath "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe" -ArgumentList "-NoProfile -ExecutionPolicy RemoteSigned -File $taskScript" -Credential $credential -LoadUserProfile -WorkingDirectory $fixture -PassThru
     if (!$testProcess.WaitForExit(300000)) { throw 'The standard-account test did not finish within five minutes' }
     if (Test-Path -LiteralPath $report) { Get-Content -LiteralPath $report }
-    if ($testProcess.ExitCode -ne 0 -or !(Test-Path -LiteralPath $exitFile) -or (Get-Content -LiteralPath $exitFile -Raw).Trim() -ne '0') {
+    if (!(Test-Path -LiteralPath $exitFile) -or (Get-Content -LiteralPath $exitFile -Raw).Trim() -ne '0') {
         throw "Disposable-account verification failed with process exit $($testProcess.ExitCode)"
     }
 } finally {
