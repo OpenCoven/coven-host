@@ -29,8 +29,8 @@ def stop(process):
         process.wait(timeout=15)
 
 
-def exercise(binary, work, installation=None):
-    env = dict(os.environ)
+def exercise(binary, work, installation=None, environment=None):
+    env = dict(os.environ if environment is None else environment)
     if installation:
         root, storage, token, port = installation
     else:

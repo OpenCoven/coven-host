@@ -8,6 +8,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -28,7 +29,7 @@ def retry(probe):
     raise RuntimeError("Automatic transfer did not finish")
 
 
-def exercise(app, verifier, legacy_payload, previous_app=None, previous_verifier=None):
+def exercise(app, verifier, legacy_payload, previous_app=None, previous_verifier=None, deletions=False):
     with tempfile.TemporaryDirectory(prefix="ch-mac.", dir="/private/tmp") as tmp:
         home = Path(tmp)
         prefix = "org.opencoven.coven-host.test." + hashlib.sha256(tmp.encode()).hexdigest()[:12]
@@ -111,6 +112,12 @@ def exercise(app, verifier, legacy_payload, previous_app=None, previous_verifier
                 for f in agents.glob("*.plist"):
                     assert plistlib.loads(f.read_bytes())["ProgramArguments"][0] == str(cli)
                 print("PASS upgraded v0.1.0 login services with the original peer data and credential")
+            if deletions:
+                unload()
+                sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
+                from installed_deletion import exercise as check_deletions
+                existing = home / "Coven", state / "server", token, int((state / "installer-port").read_text())
+                check_deletions(cli, home, existing, environment=env)
         finally:
             unload()
 
@@ -146,7 +153,8 @@ if __name__ == "__main__":
     parser.add_argument("--legacy-payload", type=Path)
     parser.add_argument("--previous-app", type=Path)
     parser.add_argument("--previous-verifier", type=Path)
+    parser.add_argument("--deletions", action="store_true", help="Exercise offline deletion and rename in this installer-created folder")
     args = parser.parse_args()
     if bool(args.previous_app) != bool(args.previous_verifier):
         parser.error("--previous-app and --previous-verifier are used together")
-    exercise(args.app, args.verifier, args.legacy_payload, args.previous_app, args.previous_verifier)
+    exercise(args.app, args.verifier, args.legacy_payload, args.previous_app, args.previous_verifier, args.deletions)
