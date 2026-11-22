@@ -74,3 +74,38 @@ On Linux with Python 3.11+ and a filesystem supporting atomic exchange, run the 
 ```
 
 When reporting a failed case, include the first error, peer revision and which copies survived.
+
+
+## Installed offline deletion candidate
+
+Host [#18](https://github.com/OpenCoven/coven-host/pull/18) merged as `16eab38dab601df6a66cbbe36304483725db8834`. The consumer [#1815](https://github.com/OpenCoven/coven/pull/1815) at `29bb4f964f257d3f1cf8a3e2e32ab5657f65dd3b` pins Host `c39e4474be545ae64fdb6bc88bcfa7e3443286be` in both the CLI manifest and lockfile. The installer workflows asserted the resulting Git tree `5844d2c3a22e2622aa59ec05ca011aad938e6306` before building. Host review head `3b86f79d` additionally changes a Windows regression under the test configuration. These are staged 0.1.2 review packages.
+
+| Platform and installer | Package SHA-256 | Installed verification |
+| --- | --- | --- |
+| macOS 27.2.1 arm64, APFS, universal application ZIP | `2d65a770edefdf7f81a2b1164d81d40b32ff8e06ebae9e3161769812a9fa893a` | Verified the downloaded app signature and ran its bundled arm64 CLI in a private prefix. Executable SHA-256 `bdd0e699ec25219faf19dd45eafb70180d7773320c354d282f577c7cbd5df0bc`. [Build and qualification](https://github.com/OpenCoven/coven-host/actions/runs/45011072026) |
+| Linux arm64, ext4, Debian package | `aedc79e23a04eee4f47593fb143c6c4cb4efcf2ae7219e07f232a33f1467e593` | Installed with dpkg and ran the production CLI from its installed path. Executable SHA-256 `ff2736e9c17e411c220c177c39134842246cefff8f9fd7e29c26ffbe984b3fbc`. [Build and qualification](https://github.com/OpenCoven/coven-host/actions/runs/45011072027) |
+| Linux x64, ext4, Debian package | `81293842379e88d52f879ea195bb370e18e75727c09dad53a0f7e869cbcdd4d6` | Hosted native x64 installed CLI, daemon and desktop scenarios passed. [Linux matrix](https://github.com/OpenCoven/coven-host/actions/runs/45011072027) |
+| Windows Server native x64, NTFS, setup EXE | `87bb1f5dba9ef8ec91e964d9211182e5c5da5c8223004c7fc5241c47f3b360bd` | Standard-user install and upgrade passed. The elevated-account diagnostic timed out waiting for a watcher record. The downloaded EXE subsequently passed the elevated control and both standard-user runs. [Initial run](https://github.com/OpenCoven/coven-host/actions/runs/45011072040) · [Downloaded EXE verification](https://github.com/OpenCoven/coven-host/actions/runs/45011686994) |
+
+### Reproduce the operator scenarios
+
+From a full Host checkout, pass the absolute installed CLI path to the qualification script below. It creates temporary profiles, protected tokens, a local authenticated peer and a production daemon. Put `TMPDIR` on the target volume. The script starts and stops only the processes for its disposable profiles. Peer-side removals use the revision-conditional HTTP API with a unique operation ID.
+
+```sh
+python3 tests/installed_profile_recovery.py "$INSTALLED_COVEN"
+```
+
+The APFS and ARM64 ext4 runs exercised a competing profile before migration, then the owning profile reopening, migrating and syncing. A rename and a deletion from each endpoint survived disconnect and restart. For local-delete versus remote-edit and local-edit versus remote-delete, both choices restored the expected live state, preserved the exact edited bytes at the reported recovery path and converged on repeat sync. The test asserts revisions 2 or 3 for those choices and compares content hashes. For ordinary deletion it also checks the peer archive and recovers displaced local files from previous versions.
+
+The candidate packages in the table can be reproduced from the pinned build workflows and retrieved from their Actions artifacts while retained. For example, the following downloads and verifies the full Linux arm64 artifact before extracting the Debian package into an empty qualification directory.
+
+```sh
+gh api repos/OpenCoven/coven-host/actions/artifacts/14750275286/zip > linux-arm64.zip
+echo '7858539c7cdcb86ed369e835723da75c8e1a2eabe181acfc462a019c8392f102  linux-arm64.zip' | sha256sum -c -
+unzip linux-arm64.zip
+sha256sum Coven-Host-0.1.2-linux-arm64.deb
+```
+
+For the integrated Host revision run `cargo test --locked --test client --test peer`, `./tests/compat-linux.sh --deletions` and `./tests/compat-linux.sh` on Linux. Both source platforms passed seven client tests, six peer tests and nine focused deletion cases. The Linux suite discovered 25 tests in each of its three pairings, with 11, 12 and 1 expected skips, including the stopped Python upgrade on the native pairing. The local full run used `CARGO_PROFILE_DEV_OPT_LEVEL=1` after the earlier default debug run timed out on a 10 MiB quota PUT. The hosted Linux compatibility job passed the default suite for the consumer pin. [Hosted compatibility](https://github.com/OpenCoven/coven-host/actions/runs/45011072027)
+
+The previous npm candidate at consumer `89f05444` passed installed APFS scenarios and timed out during daemon startup in a local emulated x86-64 guest. Its evidence and digests belong to the earlier Host pin. BunsDev owns Windows follow-up on [#10](https://github.com/OpenCoven/coven-host/issues/10), the consumer merge decision and release acceptance on [#20](https://github.com/OpenCoven/coven-host/issues/20).

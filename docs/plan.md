@@ -27,3 +27,8 @@ The maintainer’s next decision is whether to accept the profile ownership chan
 [Host #5](https://github.com/OpenCoven/coven-host/issues/5) adds deletion and rename reconciliation to the demo Castle. The Coven consumer pin and distributed packages still use the earlier behavior. Multi-client coordination, additional Castles and execution of uploaded documents have separate tracking issues.
 
 To verify #5 from a full checkout, run `./tests/compat-linux.sh --deletions` with Git, a Rust toolchain, Python 3.11+ and a filesystem supporting native replacement. It starts disposable Rust endpoints and checks both rename directions, conflict choices, acknowledgement loss and rollback. Run the script without arguments on Linux to include the historical Python pairings and stopped-installation upgrades.
+
+
+## Installed deletion qualification handoff, November 22
+
+Host deletion and recovery landed at `16eab38d`. The signed [Coven consumer PR](https://github.com/OpenCoven/coven/pull/1815) at `29bb4f96` pins Host `c39e4474`. Its tree `5844d2c3a22e2622aa59ec05ca011aad938e6306` is the one exercised by the staged installers. The [qualification report](acceptance.md#installed-offline-deletion-candidate) gives the package hashes, operator scenarios and reproduction commands. BunsDev owns consumer review and distribution. Track the desktop release separately in [installer PR #26](https://github.com/OpenCoven/coven-host/pull/26) and [coordination issue #20](https://github.com/OpenCoven/coven-host/issues/20).
