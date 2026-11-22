@@ -47,10 +47,10 @@
     <noscript>
       <p>JavaScript is turned off. Choose an installer directly.</p>
       <ul>
-        <li><a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-macOS.zip">macOS</a></li>
-        <li><a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-Windows-x64.exe">Windows</a></li>
-        <li>Linux x86-64: <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-amd64.deb">Debian package</a> or <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-x86_64.tar.gz">portable archive</a></li>
-        <li>Linux ARM64: <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-arm64.deb">Debian package</a> or <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-aarch64.tar.gz">portable archive</a></li>
+        <li><a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-macOS.zip">macOS</a></li>
+        <li><a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Windows-x64.exe">Windows</a></li>
+        <li>Linux x86-64: <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-amd64.deb">Debian package</a> or <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-x86_64.tar.gz">portable archive</a></li>
+        <li>Linux ARM64: <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-arm64.deb">Debian package</a> or <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-aarch64.tar.gz">portable archive</a></li>
       </ul>
     </noscript>
   </main>
@@ -74,19 +74,19 @@
     <p id="notice" role="status"></p>
   </details>
   <p class="offline-only"><a href="./SHA256SUMS">Checksums for the files in this kit</a></p>
-  <p class="online-only"><a href="https://github.com/OpenCoven/coven-host/releases/tag/v0.1.1">All downloads and checksums</a> · <a href="https://github.com/OpenCoven/coven-host/blob/v0.1.1/docs/setup.md">Installation help</a></p>
+  <p class="online-only"><a href="https://github.com/OpenCoven/coven-host/releases/tag/v0.1.2">All downloads and checksums</a> · <a href="https://github.com/OpenCoven/coven-host/blob/v0.1.2/docs/setup.md">Installation help</a></p>
   <script>
     'use strict';
-    const release = '0.1.1';
+    const release = '0.1.2';
     const offline = document.documentElement.dataset.distribution === 'offline';
     const base = offline ? './' : 'https://github.com/OpenCoven/coven-host/releases/download/v' + release + '/';
     const packages = {
-      mac: ['Coven-Host-0.1.1-macOS.zip', 'Open the downloaded archive, then open Coven Host.'],
-      win: ['Coven-Host-0.1.1-Windows-x64.exe', 'Open the downloaded setup program in your Windows account.'],
-      deb64: ['Coven-Host-0.1.1-linux-amd64.deb', 'Open the package in Software Install. After installation, open Coven Host from Applications.'],
-      debarm: ['Coven-Host-0.1.1-linux-arm64.deb', 'Open the package in Software Install. After installation, open Coven Host from Applications.'],
-      linux64: ['Coven-Host-0.1.1-linux-x86_64.tar.gz', 'Extract the archive and open Install Coven Host.'],
-      linuxarm: ['Coven-Host-0.1.1-linux-aarch64.tar.gz', 'Extract the archive and open Install Coven Host.']
+      mac: ['Coven-Host-0.1.2-macOS.zip', 'Open the downloaded archive, then open Coven Host.'],
+      win: ['Coven-Host-0.1.2-Windows-x64.exe', 'Open the downloaded setup program in your Windows account.'],
+      deb64: ['Coven-Host-0.1.2-linux-amd64.deb', 'Open the package in Software Install. After installation, open Coven Host from Applications.'],
+      debarm: ['Coven-Host-0.1.2-linux-arm64.deb', 'Open the package in Software Install. After installation, open Coven Host from Applications.'],
+      linux64: ['Coven-Host-0.1.2-linux-x86_64.tar.gz', 'Extract the archive and open Install Coven Host.'],
+      linuxarm: ['Coven-Host-0.1.2-linux-aarch64.tar.gz', 'Extract the archive and open Install Coven Host.']
     };
     const symptoms = {
       download: ['DOWNLOAD_ACCESS', 'download', 'GitHub offers the selected asset', 'Asset unavailable in the browser', 'Sign in to GitHub with an account that can open the private OpenCoven/coven-host repository. Then retry the download.'],

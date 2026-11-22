@@ -11,8 +11,7 @@ import tarfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-VERSION = "0.1.1"
-AMD64_SHA = "04acbac673092f29dbfce0a66a08e3b185c9246ceb4ae05381ffb1a18b03f934"
+VERSION = "0.1.2"
 DESKTOP = """[Desktop Entry]
 Type=Application
 Name=Coven Host
@@ -73,8 +72,7 @@ def build(args):
         files = {name: (package.extractfile("package/" + name).read(), 0o644)
                  for name in ["LICENSE", "LICENSE-COVEN-HOST"]}
     digest = hashlib.sha256(cli).hexdigest()
-    expected = args.sha256 if args.arch == "arm64" else AMD64_SHA
-    if digest != expected or cli[:6] != b"\x7fELF\x02\x01" or struct.unpack_from("<H", cli, 18)[0] != elf_machine:
+    if digest != args.sha256 or cli[:6] != b"\x7fELF\x02\x01" or struct.unpack_from("<H", cli, 18)[0] != elf_machine:
         raise SystemExit("The executable did not match the required architecture and qualification SHA-256.")
     versions = [tuple(map(int, v.split(b"."))) for v in re.findall(rb"\bGLIBC_(\d+\.\d+(?:\.\d+)?)\x00", cli)]
     libc = ".".join(map(str, max(versions)))
@@ -107,9 +105,9 @@ Description: Open and synchronize a local Coven folder
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--package", type=Path, required=True, help="Qualified v0.1.0 Linux npm tarball with licenses")
+    parser.add_argument("--package", type=Path, required=True, help="Qualified Linux npm tarball with licenses")
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--arch", choices=["amd64", "arm64"], default="amd64")
-    parser.add_argument("--sha256", help="Qualified ARM64 executable SHA-256")
+    parser.add_argument("--sha256", required=True, help="Executable SHA-256 from installed qualification")
     parser.add_argument("--native", type=Path, help="Use a qualified standalone native executable")
     build(parser.parse_args())
