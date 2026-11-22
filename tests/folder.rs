@@ -83,6 +83,50 @@ fn rejects_links_and_checks_permission_on_the_open_token() {
     assert!(private_dir(&castle.join("files/dir")).is_err());
 }
 
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_token_acl_limits_grants_to_the_owner() {
+    use std::{os::unix::fs::PermissionsExt, process::Command};
+
+    let (_tmp, castle, _) = fixture();
+    let token = castle.join("acl-token");
+    let contents = "x".repeat(43);
+    fs::write(&token, &contents).unwrap();
+    fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
+    assert_eq!(token_from(&token).unwrap(), contents);
+
+    let owner = Command::new("/usr/bin/id").arg("-un").output().unwrap();
+    assert!(owner.status.success());
+    let owner = std::str::from_utf8(&owner.stdout).unwrap().trim();
+    let add_entry = |entry: &str| {
+        let output = Command::new("/bin/chmod")
+            .args(["+a", entry])
+            .arg(&token)
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert_eq!(
+            fs::metadata(&token).unwrap().permissions().mode() & 0o777,
+            0o600
+        );
+    };
+    add_entry("everyone deny writeattr");
+    add_entry(&format!("user:{owner} allow read"));
+    assert_eq!(token_from(&token).unwrap(), contents);
+
+    add_entry("everyone allow readattr");
+    let error = token_from(&token).expect_err("accepted a token ACL with a non-owner grant");
+    assert!(
+        error
+            .to_string()
+            .contains("macOS ACL grants access to another principal")
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn rejects_windows_token_after_another_principal_gains_read_access() {
