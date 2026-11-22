@@ -69,3 +69,63 @@ jobs:
           name: staged-desktop-offline-kit
           path: assets/
           retention-days: 14
+  installed-linux:
+    needs: kit
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: staged-desktop-offline-kit
+          path: assets
+      - name: Install Debian package from the offline kit and exercise recovery
+        run: |
+          (cd assets && sha256sum -c SHA256SUMS)
+          unzip -q assets/Coven-Host-0.1.2-Offline.zip -d opened
+          manifest=$(find opened -name SHA256SUMS)
+          (cd "$(dirname "$manifest")" && sha256sum -c SHA256SUMS)
+          sudo dpkg -i "$(find opened -name '*-${{ matrix.arch }}.deb')"
+          sudo useradd -m -s /bin/bash coven-test
+          test "$(findmnt -T /home/coven-test -no FSTYPE)" = ext4
+          sudo install -m 755 installer/linux/check-installed.py tests/installed_deletion.py /tmp/
+          if ! sudo -i -u coven-test python3 /tmp/check-installed.py --disposable-account coven-test --launcher /usr/bin/coven-host-desktop --app /usr/lib/coven-host-desktop; then
+            sudo -i -u coven-test cat /home/coven-test/.local/state/coven-host-support/last-error.txt || true
+            exit 1
+          fi
+          sudo -i -u coven-test python3 /tmp/installed_deletion.py /usr/lib/coven-host-desktop/coven
+  installed-windows:
+    needs: kit
+    runs-on: windows-2025
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0
+        with:
+          name: staged-desktop-offline-kit
+          path: assets
+      - name: Verify the kit and extract the Windows installer
+        shell: bash
+        run: |
+          (cd assets && sha256sum -c SHA256SUMS)
+          unzip -q assets/Coven-Host-0.1.2-Offline.zip -d opened
+          manifest=$(find opened -name SHA256SUMS)
+          (cd "$(dirname "$manifest")" && sha256sum -c SHA256SUMS)
+      - name: Exercise the GUI installation and NTFS file sharing
+        shell: powershell
+        run: |
+          $installer = @(Get-ChildItem opened -Recurse -Filter '*.exe')
+          if ($installer.Count -ne 1 -or (Get-Volume -DriveLetter $env:SystemDrive[0]).FileSystem -ne 'NTFS' -or $env:RUNNER_ARCH -ne 'X64') { throw 'Expected one x64 installer and NTFS' }
+          ./tests/windows/run-as-standard-user.ps1 -Installer $installer[0].FullName
