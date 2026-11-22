@@ -98,6 +98,9 @@ fn private_descriptor() -> Result<Local> {
 }
 
 pub(super) fn protect(file: &File) -> Result<()> {
+    // Tightening a DACL changes the source document even if the later move fails.
+    // Verify ownership on this same handle before changing its permissions.
+    check_access(file, false)?;
     let descriptor = private_descriptor()?;
     if unsafe {
         SetKernelObjectSecurity(
@@ -130,6 +133,10 @@ pub(super) fn mkdir(path: &Path) -> Result<()> {
 }
 
 pub(in crate::folder) fn check_private(file: &File) -> Result<()> {
+    check_access(file, true)
+}
+
+fn check_access(file: &File, require_private_acl: bool) -> Result<()> {
     let user = User::current()?;
     let (mut owner, mut acl, mut descriptor) = (null_mut(), null_mut(), null_mut());
     let result = unsafe {
@@ -152,6 +159,9 @@ pub(in crate::folder) fn check_private(file: &File) -> Result<()> {
         !owner.is_null() && unsafe { EqualSid(owner, user.sid()) } != 0,
         "private file or directory must be owned by the current user"
     );
+    if !require_private_acl {
+        return Ok(());
+    }
     ensure!(
         !acl.is_null() && unsafe { IsValidAcl(acl) } != 0,
         "a private Windows DACL is required"
@@ -184,4 +194,42 @@ pub(in crate::folder) fn check_private(file: &File) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::windows::fs::OpenOptionsExt;
+    use std::process::Command;
+    use windows_sys::Win32::Storage::FileSystem::{READ_CONTROL, WRITE_DAC};
+
+    #[test]
+    fn refusing_a_group_owned_file_preserves_its_permissions() -> Result<()> {
+        let dir = tempfile::tempdir()?;
+        let path = dir.path().join("document.txt");
+        std::fs::write(&path, b"original")?;
+        // An elevated Windows token can assign the Administrators group as the
+        // default owner. Ordinary per-user sessions exercise the positive path.
+        let observe = || -> Result<Vec<u8>> {
+            let output = Command::new("powershell.exe")
+                .args(["-NoProfile", "-NonInteractive", "-Command",
+                    "$a = Get-Acl -LiteralPath $env:COVEN_ACL_TEST_FILE -ErrorAction Stop; if ($a.GetOwner([System.Security.Principal.SecurityIdentifier]) -ne [System.Security.Principal.WindowsIdentity]::GetCurrent().User) { $a.Sddl }"])
+                .env("COVEN_ACL_TEST_FILE", &path)
+                .output()?;
+            ensure!(output.status.success(), "cannot inspect the fixture ACL");
+            Ok(output.stdout)
+        };
+        let before = observe()?;
+        if before.is_empty() {
+            return Ok(());
+        }
+        let file = File::options()
+            .access_mode(READ_CONTROL | WRITE_DAC)
+            .open(&path)?;
+        let error = protect(&file).expect_err("group-owned document must be refused");
+        ensure!(error.to_string().contains("owned by the current user"));
+        ensure!(observe()? == before, "refusal changed the document ACL");
+        ensure!(std::fs::read(&path)? == b"original");
+        Ok(())
+    }
 }
