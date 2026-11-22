@@ -12,21 +12,20 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
+          ref: ddde566e5d39f89cc0bc820da60f95f3848749fc
           persist-credentials: false
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           repository: OpenCoven/coven
-          ref: 6855b5a4b0b26f08bd711d302ffc8534b27ebea2
+          ref: 8fb558c60b006b337bf7850e6e43e0793b788097
           path: consumer
           persist-credentials: false
       - name: Compile the exact candidate for both Mac architectures
         working-directory: consumer
         run: |
-          sed -i '' 's/65927dd5e64d732cb99926bed66492994acdcec5/247904def96591b7f473a6e9a98ec8363b925da0/g' crates/coven-cli/Cargo.toml Cargo.lock
-          git add crates/coven-cli/Cargo.toml Cargo.lock
           test "$(git write-tree)" = 1a7978ff82e5a4e39d65f0274c13e5d4b32e380e
           rustup target add x86_64-apple-darwin aarch64-apple-darwin
-          export MACOSX_DEPLOYMENT_TARGET=11.0 COVEN_BUILD_VERSION=v0.1.2-review
+          export MACOSX_DEPLOYMENT_TARGET=11.0 COVEN_BUILD_VERSION=v0.1.2 COVEN_BUILD_COMMIT=8fb558c60b006b337bf7850e6e43e0793b788097
           cargo build --release --locked -p coven-cli --target aarch64-apple-darwin --target x86_64-apple-darwin
       - name: Stage and qualify the two native payloads
         run: |
@@ -34,12 +33,13 @@ jobs:
           cp consumer/target/aarch64-apple-darwin/release/coven payloads/coven-arm64
           cp consumer/target/x86_64-apple-darwin/release/coven payloads/coven-x86_64
           shasum -a 256 payloads/coven-* | tee payloads/SHA256SUMS
-          python3 tests/installed_deletion.py "$PWD/payloads/coven-arm64"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: qualified-mac-payloads
           path: payloads/
           retention-days: 14
+      - name: Exercise installed offline operations
+        run: python3 tests/installed_deletion.py "$PWD/payloads/coven-arm64"
       - name: Build the universal Mac candidate
         run: |
           installer/macos/build.sh payloads/coven-arm64 "$(awk '/coven-arm64$/ {print $1}' payloads/SHA256SUMS)" consumer/LICENSE assets payloads/coven-x86_64 "$(awk '/coven-x86_64$/ {print $1}' payloads/SHA256SUMS)"
