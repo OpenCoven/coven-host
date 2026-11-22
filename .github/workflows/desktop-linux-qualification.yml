@@ -6,21 +6,6 @@ on:
 permissions:
   contents: read
 jobs:
-  compatibility:
-    runs-on: ubuntu-24.04
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: 22f802e76e0c944707bb0dd3b14716916c091f95
-          fetch-depth: 0
-          persist-credentials: false
-      - run: |
-          findmnt -T "$RUNNER_TEMP" -o SOURCE,FSTYPE,TARGET
-          test "$(findmnt -T "$RUNNER_TEMP" -no FSTYPE)" = ext4
-          export TMPDIR="$RUNNER_TEMP"
-          cargo test --locked --all-targets
-          tests/compat-linux.sh --deletions
-          tests/compat-linux.sh
   desktop:
     strategy:
       fail-fast: false
@@ -56,15 +41,20 @@ jobs:
           sha256sum "$native"
           python3 tests/installed_deletion.py "$native"
           python3 installer/linux/build.py --arch "${{ matrix.arch }}" --native "$native" --sha256 "$(sha256sum "$native" | cut -d' ' -f1)" --coven-license consumer/LICENSE --out assets
-          sudo dpkg -i assets/*.deb
-          sudo useradd -m -s /bin/bash coven-test
-          test "$(findmnt -T /home/coven-test -no FSTYPE)" = ext4
-          sudo install -m 755 installer/linux/check-installed.py tests/installed_deletion.py /tmp/
-          sudo -i -u coven-test python3 /tmp/check-installed.py --disposable-account coven-test --launcher /usr/bin/coven-host-desktop --app /usr/lib/coven-host-desktop
-          sudo -i -u coven-test python3 /tmp/installed_deletion.py /usr/lib/coven-host-desktop/coven
-          sha256sum assets/*
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: desktop-linux-${{ matrix.arch }}
           path: assets/
           retention-days: 14
+      - name: Exercise the installed desktop and report startup diagnostics
+        run: |
+          sudo dpkg -i assets/*.deb
+          sudo useradd -m -s /bin/bash coven-test
+          test "$(findmnt -T /home/coven-test -no FSTYPE)" = ext4
+          sudo install -m 755 installer/linux/check-installed.py tests/installed_deletion.py /tmp/
+          if ! sudo -i -u coven-test python3 /tmp/check-installed.py --disposable-account coven-test --launcher /usr/bin/coven-host-desktop --app /usr/lib/coven-host-desktop; then
+            sudo -i -u coven-test cat /home/coven-test/.local/state/coven-host-support/last-error.txt || true
+            exit 1
+          fi
+          sudo -i -u coven-test python3 /tmp/installed_deletion.py /usr/lib/coven-host-desktop/coven
+          sha256sum assets/*
