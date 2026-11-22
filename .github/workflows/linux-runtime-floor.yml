@@ -30,14 +30,14 @@ jobs:
       - name: Build the native consumer against glibc 2.34
         working-directory: consumer
         run: |
-          sed -i 's/65927dd5e64d732cb99926bed66492994acdcec5/22f802e76e0c944707bb0dd3b14716916c091f95/g' crates/coven-cli/Cargo.toml Cargo.lock
+          sed -i 's/65927dd5e64d732cb99926bed66492994acdcec5/247904def96591b7f473a6e9a98ec8363b925da0/g' crates/coven-cli/Cargo.toml Cargo.lock
           git add crates/coven-cli/Cargo.toml Cargo.lock
-          test "$(git write-tree)" = d30e4742a9e3fbca2c03f96a4697dfe895687e60
+          test "$(git write-tree)" = 1a7978ff82e5a4e39d65f0274c13e5d4b32e380e
           toolchain=$(rustc --print sysroot)
           docker run --rm -v "$PWD:/src" -v "$toolchain:/opt/rust:ro" -w /src \
             almalinux@sha256:02df05719ef287ebd0df0a1eedb9172a00bd70703aed7b25660e426b8e0d6047 bash -ceu '
               dnf install -y gcc gcc-c++ git make openssl-devel perl perl-IPC-Cmd cmake pkgconf-pkg-config
-              export PATH="/opt/rust/bin:$PATH" COVEN_BUILD_VERSION=v0.1.2-qualification.24
+              export PATH="/opt/rust/bin:$PATH" COVEN_BUILD_VERSION=v0.1.2-review
               git config --global --add safe.directory /src
               getconf GNU_LIBC_VERSION
               cargo build --locked --release -p coven-cli
@@ -65,3 +65,14 @@ jobs:
           fi
           sudo -i -u coven-test python3 /tmp/installed_deletion.py /usr/lib/coven-host-desktop/coven
           sha256sum assets/*
+
+  compatibility:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: 247904def96591b7f473a6e9a98ec8363b925da0
+          fetch-depth: 0
+          persist-credentials: false
+      - run: cargo test --locked && tests/compat-linux.sh

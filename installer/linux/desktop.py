@@ -279,8 +279,9 @@ def retire_previous_service(backend, unit):
         require(hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"),
                 "LOGIN", "upgrade the running service", "a restartable login service", "login restart required", relogin)
         pid = int((STATE / "session-ready").read_text())
-        handle = os.pidfd_open(pid)
+        handle = None
         try:
+            handle = os.pidfd_open(pid)
             process = Path("/proc", str(pid))
             args = (process / "cmdline").read_bytes().rstrip(b"\0").split(b"\0")
             scripts = [os.fsencode(directory / "desktop.py") for directory in (SYSTEM, PORTABLE, PORTABLE.parent / "0.1.1")]
@@ -288,8 +289,14 @@ def retire_previous_service(backend, unit):
                     and args[2] in scripts and args[3] == b"session",
                     "SERVICE", "identify the previous service", "installer-owned supervisor", "process differs", relogin)
             signal.pidfd_send_signal(handle, signal.SIGTERM)
+        except OSError as err:
+            if err.errno not in (errno.ENOSYS, errno.EPERM, errno.EACCES):
+                raise
+            raise Problem("LOGIN", "upgrade the running service", "a restartable login service",
+                          "login restart required", relogin, detail=errno.errorcode[err.errno]) from err
         finally:
-            os.close(handle)
+            if handle is not None:
+                os.close(handle)
         deadline = time.monotonic() + 15
         while session_ready() and time.monotonic() < deadline:
             time.sleep(0.1)

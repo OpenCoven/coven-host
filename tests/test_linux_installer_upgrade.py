@@ -1,4 +1,5 @@
 """Protect login entries when a portable desktop installation switches versions."""
+import errno
 import importlib.util
 import os
 from pathlib import Path
@@ -39,6 +40,19 @@ class PortableUpgrade(unittest.TestCase):
             self.desktop.register(self.app, "session", upgrading=True)
         self.assertIn(str(self.app / "desktop.py"), self.autostart.read_text())
         self.assertIn(str(self.app / "desktop.py"), self.menu.read_text())
+
+    def test_kernel_without_pidfds_offers_relogin_without_stopping_a_process(self):
+        state = self.app.parent
+        state.mkdir(parents=True, exist_ok=True)
+        (state / "session-ready").write_text("12345")
+        with patch.object(self.desktop, "STATE", state), patch.object(self.desktop, "session_ready", return_value=True), \
+             patch.object(os, "pidfd_open", side_effect=OSError(errno.ENOSYS, "unsupported"), create=True), \
+             patch.object(self.desktop.signal, "pidfd_send_signal", create=True) as send:
+            with self.assertRaises(self.desktop.Problem) as failure:
+                self.desktop.retire_previous_service("session", None)
+        self.assertEqual(failure.exception.fields[0], "LOGIN")
+        self.assertIn("Sign out", failure.exception.fields[-1])
+        send.assert_not_called()
 
     def test_foreign_menu_preserves_both_entries(self):
         previous = self.autostart.read_bytes()

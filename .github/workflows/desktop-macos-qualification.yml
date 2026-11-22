@@ -22,11 +22,11 @@ jobs:
       - name: Compile the exact candidate for both Mac architectures
         working-directory: consumer
         run: |
-          sed -i '' 's/65927dd5e64d732cb99926bed66492994acdcec5/22f802e76e0c944707bb0dd3b14716916c091f95/g' crates/coven-cli/Cargo.toml Cargo.lock
+          sed -i '' 's/65927dd5e64d732cb99926bed66492994acdcec5/247904def96591b7f473a6e9a98ec8363b925da0/g' crates/coven-cli/Cargo.toml Cargo.lock
           git add crates/coven-cli/Cargo.toml Cargo.lock
-          test "$(git write-tree)" = d30e4742a9e3fbca2c03f96a4697dfe895687e60
+          test "$(git write-tree)" = 1a7978ff82e5a4e39d65f0274c13e5d4b32e380e
           rustup target add x86_64-apple-darwin aarch64-apple-darwin
-          export MACOSX_DEPLOYMENT_TARGET=11.0 COVEN_BUILD_VERSION=v0.1.2-qualification.24
+          export MACOSX_DEPLOYMENT_TARGET=11.0 COVEN_BUILD_VERSION=v0.1.2-review
           cargo build --release --locked -p coven-cli --target aarch64-apple-darwin --target x86_64-apple-darwin
       - name: Stage and qualify the two native payloads
         run: |
