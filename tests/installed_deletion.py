@@ -143,6 +143,26 @@ def exercise(binary, work):
         archive_bytes("files/conflict.txt", edit)
         print("PASS delete versus edit, status recovery copy, explicit resolution and retained exact peer bytes", flush=True)
 
+        # Both sides can finish deleting a conflicted file while the daemon is offline.
+        path.write_bytes(b"another base")
+        cli("host", "sync")
+        path.write_bytes(edit)
+        active = next(row for row in inventory()["files"] if row["path"] == "files/conflict.txt")
+        code, _ = request("DELETE", "/files/conflict.txt", **{
+            "X-Host-ID": inventory()["host"], "If-Match": f'"{active["revision"]}"',
+            "X-Sync-Operation": secrets.token_hex(16)})
+        assert code == 200
+        cli("host", "sync", success=False)
+        conflict, = status()["conflicts"]
+        archived = Path(conflict["local"])
+        assert archived.read_bytes() == edit
+        path.unlink()
+        cli("daemon", "restart")
+        cli("host", "sync")
+        assert not status()["conflicts"] and archived.read_bytes() == edit
+        assert request("GET", "/files/conflict.txt")[0] == 404 and not path.exists()
+        print("PASS both sides deleted after conflict; archive retained through daemon restart", flush=True)
+
         if os.name == "nt":
             held = files / "held.txt"
             held.write_bytes(content)
