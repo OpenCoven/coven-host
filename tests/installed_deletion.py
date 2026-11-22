@@ -1,4 +1,5 @@
 """Exercise an installed Coven binary using only temporary peer storage and profiles."""
+from contextlib import closing
 import csv
 import hashlib
 import http.client
@@ -90,7 +91,7 @@ def exercise(binary, work, installation=None, environment=None):
         return json.loads(cli("host", "status"))
 
     def archive_bytes(name, data):
-        with sqlite3.connect(storage / "host.sqlite") as db:
+        with closing(sqlite3.connect(storage / "host.sqlite")) as db:
             rows = db.execute("SELECT bytes,sha256 FROM deleted_versions WHERE path=?", (name,))
             assert (data, hashlib.sha256(data).hexdigest()) in rows.fetchall()
 
@@ -151,7 +152,17 @@ def exercise(binary, work, installation=None, environment=None):
             assert after.read_bytes() == content and not (files / moved.name).exists()
             watcher = subprocess.Popen([binary, "host", "watch"], env=env, stdout=subprocess.DEVNULL)
             received = files / moved.name
-            until(lambda: not after.exists() and received.exists() and received.read_bytes() == content)
+            try:
+                until(lambda: not after.exists() and received.exists() and received.read_bytes() == content)
+            except RuntimeError:
+                state = status()
+                # These are disposable fixture paths. Keep the account and profile out of CI logs.
+                error = str(state.get("error", ""))
+                for location in (work, root, storage, Path.home()):
+                    error = error.replace(str(location), "<fixture>")
+                print("Watcher exit", watcher.poll(), "phase", state.get("phase"), "error", error[:400],
+                      "old file present", after.exists(), "renamed file present", received.exists(), flush=True)
+                raise
             stop(watcher)
             cli("host", "sync")
             view = inventory()
