@@ -13,7 +13,7 @@ The Rust library in this repository implements file transfer, reconciliation and
 | Find source, tests and related work before editing | [Agent and contributor guide](AGENTS.md) |
 | Check which binaries, platforms and behaviors passed | [Acceptance report and verification commands](docs/acceptance.md) |
 
-The MVP supports a single client, peer and Castle. When both endpoints support deletion, edits, renames and deletions synchronize in either direction. If one side deletes a file while the other edits it, the CLI reports where to recover the edited bytes and lets you choose the outcome. [Recover a deletion or rename](docs/operations.md#recover-a-deletion-or-rename)
+Two independently configured clients can sync one owner’s demo Castle with the same peer. When both endpoints support deletion, edits, renames and deletions synchronize in either direction. If one side deletes a file while the other edits it, the CLI reports where to recover the edited bytes and lets you choose the outcome. [Recover a deletion or rename](docs/operations.md#recover-a-deletion-or-rename)
 
 ## Preview the Host landing page
 

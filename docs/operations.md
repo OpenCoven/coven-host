@@ -2,6 +2,12 @@
 
 Use a Coven CLI and daemon built with the `hostSync` capability. The [acceptance report](acceptance.md) identifies the tested build. The following commands use a Unix client and a Linux peer. On Windows, use the same CLI commands with local absolute paths and an owner-only ACL on the token. Keep private client state and the synchronized folder in separate directories on the same volume.
 
+## Connect two clients
+
+Two clients belonging to the same owner can synchronize independent local copies of the demo Castle with one authenticated peer. Each client needs its own folder, daemon profile and private SQLite state. On each computer, initialize the local folder and connect it to the same peer using its own protected token file containing the shared owner credential. Follow the [SSH setup](#connect-through-ssh) for a remote peer. Each client pins the peer identity independently.
+
+If one client edits a file offline and the other deletes it, the first change to reach the peer advances its revision. On the client that reports the conflict, inspect the saved edit with `coven host status`. Use `--local` to keep that client’s outcome or `--remote` to keep the committed peer outcome. Run sync on both clients to converge. The saved edit stays available even when you choose deletion. Both clients have the same authority over the Castle. The shared credential does not provide per-device revocation.
+
 ## Recover a deletion or rename
 
 The v0.1.1 desktop release preserves a missing synchronized file on the peer for operator attention. The v0.1.2 desktop release negotiates deletion support between the native client and peer. When an editor renames a file offline, the next sync can publish its new path and retire the old path in separate operations. After an interrupted connection, reconnect and run `coven host sync` to finish. [Release status](plan.md#offline-deletion-and-rename-release)
@@ -71,7 +77,7 @@ Stop the Python client and peer before switching an existing installation. Use t
 - A local deletion that races with a peer edit, or a local edit that races with a peer deletion, appears under conflicts. Inspect the surviving copy, choose the side to keep with `resolve --local` or `--remote` for that path, then sync. Choosing the deleted side removes the document. The edited bytes stay in recovery. A removed local file also remains under `previousVersions`.
 - With an older peer or client, a local rename can upload the new path while leaving the old path unresolved. Upgrade both endpoints before relying on deletion propagation. A stale creation request at revision zero cannot overwrite a deleted path on the new peer.
 
-One token authorizes one owner and one client for the demo Castle. The client pins the peer identity on its first authenticated inventory. Back up state with the corresponding process stopped. Use the peer API for remote writes so bytes, revisions and retry receipts stay consistent.
+One token authorizes its holder to access the owner’s demo Castle. The client pins the peer identity on its first authenticated inventory. Back up state with the corresponding process stopped. Use the peer API for remote writes so bytes, revisions and retry receipts stay consistent.
 
 The scoped API is rooted at `/v1/castles/demo/files`. An authenticated `GET` lists revisioned items and the host ID. Append `/files/...` or `/results/...` to read an item. A `PUT` to that item requires the host ID, quoted expected revision (`"0"` for creation), content length, SHA-256 and bearer authorization. The shipped `get`, `put` and `demo-result` commands use this interface.
 
