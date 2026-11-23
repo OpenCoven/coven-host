@@ -1,0 +1,40 @@
+name: Qualify two clients from the public desktop package
+on:
+  push:
+    branches: [qualification/6-published-clients]
+permissions:
+  contents: read
+jobs:
+  installed:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            arch: amd64
+            digest: d3844020b05954f898e9b841d34a06812ca1abc45f15518ef0b27bada9104275
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            digest: b867899bcdbf5d729e4c74df3769b2e24f9f3322b934533d931695970d81f50d
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Install v0.1.2 and run two independent clients as a regular user
+        env:
+          ARCH: ${{ matrix.arch }}
+          DIGEST: ${{ matrix.digest }}
+        run: |
+          package="Coven-Host-0.1.2-linux-$ARCH.deb"
+          curl -fsSL --retry 3 "https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/$package" -o "$RUNNER_TEMP/$package"
+          echo "$DIGEST  $RUNNER_TEMP/$package" | sha256sum -c -
+          sudo dpkg -i "$RUNNER_TEMP/$package"
+          sudo useradd -m -s /bin/bash castle-test
+          temp=/home/castle-test/qualification
+          sudo -u castle-test mkdir -m 700 "$temp"
+          test "$(findmnt -n -T "$temp" -o FSTYPE)" = ext4
+          sudo cp tests/{fault_proxy,installed_deletion,test_multi_client,installed_profile_recovery}.py "$temp/"
+          sudo -iu castle-test env TMPDIR="$temp" python3 "$temp/test_multi_client.py" /usr/lib/coven-host-desktop/coven
+          sudo -iu castle-test env TMPDIR="$temp" python3 "$temp/installed_profile_recovery.py" /usr/lib/coven-host-desktop/coven
