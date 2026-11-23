@@ -1,4 +1,4 @@
-name: Verify the exact multi-client source with the full Linux command
+name: Verify contributor readiness with the full Linux command
 on:
   push:
     branches: [qualification/6-published-clients]
@@ -16,7 +16,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: e98b787055aa788ea15a52618f7b7d276fd1ec37
+          ref: 502dabb0b5c4a83f3fb8e0f16c0deb0386c5d1ca
           fetch-depth: 0
           persist-credentials: false
       - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt,clippy
@@ -30,4 +30,10 @@ jobs:
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/bin" gitleaks
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - run: gitleaks version
-      - run: scripts/check.sh --full
+      - name: Run the full suite with a working alternate Python executable
+        run: |
+          mkdir "$RUNNER_TEMP/interpreters"
+          ln -s "$(command -v python3)" "$RUNNER_TEMP/interpreters/python"
+          printf '#!/bin/sh\nexit 1\n' > "$RUNNER_TEMP/interpreters/python3"
+          chmod +x "$RUNNER_TEMP/interpreters/python3"
+          PATH="$RUNNER_TEMP/interpreters:$PATH" scripts/check.sh --full
