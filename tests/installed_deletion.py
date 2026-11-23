@@ -30,6 +30,17 @@ def stop(process):
         process.wait(timeout=15)
 
 
+def write_token(token):
+    token.write_text(secrets.token_hex(32), encoding="ascii")
+    if os.name == "nt":
+        sid = next(csv.reader(subprocess.check_output(
+            ["whoami", "/user", "/fo", "csv", "/nh"], text=True).splitlines()))[1]
+        for args in (["/setowner", "*" + sid], ["/inheritance:r", "/grant:r", f"*{sid}:(F)"]):
+            subprocess.run(["icacls", token, *args], stdout=subprocess.DEVNULL, check=True)
+    else:
+        token.chmod(0o600)
+
+
 def exercise(binary, work, installation=None, environment=None):
     env = dict(os.environ if environment is None else environment)
     if installation:
@@ -38,14 +49,7 @@ def exercise(binary, work, installation=None, environment=None):
         env["COVEN_HOME"] = str(work / "profile")
         env.pop("COVEN_HOST_STATE", None)
         token = work / "access"
-        token.write_text(secrets.token_hex(32), encoding="ascii")
-        if os.name == "nt":
-            sid = next(csv.reader(subprocess.check_output(
-                ["whoami", "/user", "/fo", "csv", "/nh"], text=True).splitlines()))[1]
-            for args in (["/setowner", "*" + sid], ["/inheritance:r", "/grant:r", f"*{sid}:(F)"]):
-                subprocess.run(["icacls", token, *args], stdout=subprocess.DEVNULL, check=True)
-        else:
-            token.chmod(0o600)
+        write_token(token)
         root = work / "castle"
         storage = work / "peer"
         with socket.socket() as s:

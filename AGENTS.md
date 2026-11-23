@@ -38,6 +38,8 @@ Git runs the guard against the staged changes on commit. It uses Gitleaks’ def
 
 Run `scripts/check.sh` before handing off; it runs the [verification commands](docs/acceptance.md#run-the-checks) that CI runs on every pull request. Use `scripts/check.sh --full` on Linux for the mixed-language matrix. Run file replacement and recovery changes on the affected volume type. For wire or schema changes, include retry after lost acknowledgement, host rollback and Python-created state. Use disposable roots, storage and tokens. Keep credentials and private recovery paths out of shared reports.
 
+For a two-client change, run `scripts/check.sh --full` on Linux. The native adapter exercises both reconnect orders, both conflict choices and a lost acknowledgement during that matrix. Repeat with `python3 tests/test_multi_client.py "$INSTALLED_COVEN"`, using the absolute path to the installed CLI and a temporary directory on the filesystem under test. Use `python3 tests/installed_profile_recovery.py "$INSTALLED_COVEN"` to verify ownership before migration and recovery against the installed daemon.
+
 ## Publishing a handoff
 
 Link the tracking issue and identify any consumer pin separately from the PR head. Record whether evidence came from source tests, a packaged binary, a real daemon or a remote peer. For Markdown, keep each ordinary paragraph on one source line and inspect the final rendered body. Use separate list items, table rows and code fences where they carry meaning.

@@ -52,6 +52,25 @@ Select-String -Path .\SHA256SUMS -Pattern '  Coven-Host-0\.1\.2-Windows-x64\.exe
 
 On macOS, run `shasum -a 256 SHA256SUMS` to check the manifest itself. After extracting the offline kit, run `shasum -a 256 -c SHA256SUMS` from the extracted folder. On Linux, use `sha256sum` in place of `shasum -a 256`.
 
+## Two-client recovery
+
+The public v0.1.2 installer contains Coven CLI and production daemon build `9e14f365e07e57892920d9fed31bbbf9b257b66c`, using Host library `c39e4474be545ae64fdb6bc88bcfa7e3443286be`. On physical Apple silicon/APFS, the notarized Mac ZIP (SHA-256 `0d94c02d04566ab2184abed21833bc6add81583b492820015fa4e9b8cc407ecf`) installed into a scratch home. Two independent daemon profiles, state databases and Castle roots connected to the same peer. [Release assets and source receipt](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.2)
+
+The downloaded AMD64 and ARM64 Debian packages passed the same four cases as ordinary users on native Ubuntu runners using ext4. Both packages also passed the independent profile-before-migration verifier from PR #27. [Installed Linux checks](https://github.com/OpenCoven/coven-host/actions/runs/45289998169)
+
+Two additional runs of the ARM64 package in a local container encountered a daemon IPC reset during status and a lifecycle-health timeout during initialization. The historical quota test also timed out in that guest. The hosted Linux runs used the original deadlines. [Qualification notes](https://github.com/OpenCoven/coven-host/issues/6#issuecomment-7117211723) · [Full Linux suite](https://github.com/OpenCoven/coven-host/actions/runs/45290371269)
+
+Both clients started at revision 1, disconnected, and made competing changes. The first client's response was dropped after the peer committed revision 2. The peer and clients restarted. The other client observed the conflict before the first retried its operation. The retry used the same operation ID. Each case used a fresh fixture, verified both client databases and the peer database, and repeated sync to check that the revision stayed stable. Every resolution preserved the edited bytes with SHA-256 `9cf697f3bab3fbb3fdcfe9e84b9ba63c40bd13211c11fc8a06b84b9b48c3219c`.
+
+| First change at the peer | Owner keeps | Both folders and peer after resolution |
+| --- | --- | --- |
+| Delete | Deletion | File absent at revision 2. The peer archive retains the original bytes. |
+| Delete | Edit | Edited bytes restored at revision 3. The peer archive retains the original bytes. |
+| Edit | Deletion | File absent at revision 3. The peer archive retains the edited bytes. |
+| Edit | Edit | Edited bytes present at revision 2. The conflict copy remains recoverable. |
+
+The [contributor guide](../AGENTS.md#source-and-verification-map) gives the installed and source verification commands. The earlier Windows Server and same-Mac SSH results are recorded separately in the [desktop installer results](#desktop-installers).
+
 ## SSH walkthrough
 
 The macOS client opened a strict host-key-checked SSH forward to a Linux guest. With the tunnel down, a local edit survived a daemon restart. The peer restarted on its original database and retained its identity and revision 1. After reconnect, the offline edit became revision 2. Conflicting edits produced two recoverable versions. Explicit local resolution left both endpoints at revision 4 with SHA-256 `6089e19ae7647e2b425a5648590d62b37dc92d8b8cb957bb0e68dde52e552903`.
