@@ -58,25 +58,38 @@ The macOS client opened a strict host-key-checked SSH forward to a Linux guest. 
 
 The walkthrough passed against x86-64 and ARM Linux guests. The client and guests shared one physical Mac. To repeat it, follow the [SSH setup](operations.md#connect-through-ssh), record the peer identity and file hash before disconnection, then compare the identity, revision and file bytes on reconnect and after resolution.
 
+## Remaining operator qualification
+
+| Issue | Prerequisite | Evidence to record |
+| --- | --- | --- |
+| [#9](https://github.com/OpenCoven/coven-host/issues/9) | Physical Intel Mac and universal installer | Record macOS version and executable digest, fresh and repeat setup, both transfer directions, login sync and copyable diagnostics. The Intel run under Rosetta used an Apple silicon host. |
+| [#10](https://github.com/OpenCoven/coven-host/issues/10) | Native x64 Windows 11 hardware with NTFS | BunsDev owns the complete installed and desktop scenario set plus folder and library tests. Record Windows build, volume, installer digest, results and inapplicable cases. Hosted x64 Windows Server installation, upgrade and recovery results are recorded separately in the release handoff. |
+| [#11](https://github.com/OpenCoven/coven-host/issues/11) | Signing custodian with a protected Authenticode identity | BunsDev coordinates a signed test EXE, valid `Get-AuthenticodeSignature` result, documented verification and passing `scripts/check.sh kit`. |
+| [#12](https://github.com/OpenCoven/coven-host/issues/12) | Two separate physical machines, SSH access and disposable profiles | Record both hosts and the network path, then compare peer identity, revisions and hashes after disconnect, peer restart, reconnect and conflict resolution. |
+
+To repeat installed deletion recovery, run `python3 tests/installed_profile_recovery.py "$INSTALLED_COVEN"` with the absolute path to the installed CLI and `TMPDIR` on the volume under test. The harness starts disposable profiles, an authenticated peer and the production daemon. It checks competing-profile refusal before migration, offline rename and deletion in both directions, both conflict choices, exact displaced bytes and repeat-sync convergence. Match your installer digest to the [published release receipt](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/installer-receipt.json).
+
 ## Linux compatibility
 
 The Python client passed all ten reference scenarios against the Rust peer. The Rust client passed nine reference scenarios against each peer implementation. Native filesystem race tests exercise the exchange case that the reference suite injects into Python. Rust also opened stopped Python state with a pending upload acknowledgement and an open conflict, and detected both an older peer snapshot and a changed digest at the same conflict revision.
 
 ## Run the checks
 
-From the repository root, run the Rust checks on the target OS. The example binary adapts the production library to the Python test harness.
+From the repository root, run `scripts/check.sh` on the target OS. The pull request workflow calls its named steps across three operating systems.
 
-```sh
-cargo fmt --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked --all-targets
-cargo build --locked --example compat_client
-```
+| Command | Steps | Requirements |
+| --- | --- | --- |
+| `scripts/check.sh` or `scripts/check.sh --fast` | `rust`, `hook`, `kit` | Rust toolchain, Gitleaks 8.30.1 or a compatible v8 release, OpenSSL, Python 3.11+ |
+| `scripts/check.sh --full` | Adds `compat` | Linux with Python 3.11+ and a filesystem supporting atomic exchange, such as ext4 |
+| `scripts/check.sh STEP...` | The named steps only | Requirements of those steps |
 
-On Linux with Python 3.11+ and a filesystem supporting atomic exchange, run the three interoperability combinations and the in-place upgrade. The script extracts the historical reference from Git into a temporary directory and removes it on exit. A shallow checkout must fetch the fixture commit named by the script first. The sync engine and peer run natively in Rust. The Linux desktop setup launcher also uses Python.
+The steps run these checks:
 
-```sh
-./tests/compat-linux.sh
-```
+- `rust` runs `cargo fmt --check`, `cargo clippy --locked --all-targets -- -D warnings`, `cargo test --locked --all-targets` and `cargo build --locked --example compat_client`. The example binary adapts the production library to the Python test harness.
+- `hook` runs `./tests/pre-commit.sh`, which exercises the commit guard in a disposable repository.
+- `kit` runs the offline-kit regression test in `tests/test_offline_kit.py`.
+- `compat` runs `./tests/compat-linux.sh`: the three interoperability combinations and the in-place upgrade. The script extracts the historical reference from Git into a temporary directory and removes it on exit. A shallow checkout must fetch the fixture commit named by the script first. On other systems the script reports `compat` as not run instead of passing it. The sync engine and peer run natively in Rust. The Linux desktop setup launcher also uses Python.
+
+CI runs `rust` on Ubuntu (ext4), macOS (case-insensitive APFS) and Windows (NTFS), runs `kit` and `compat` on Ubuntu, and runs `hook` plus a Gitleaks scan of the change's commits. Hosted runners cover only their default volumes. Changes to replacement or recovery still need a run on the affected volume type, and the installed-package and SSH scenarios above remain manual.
 
 When reporting a failed case, include the first error, peer revision and which copies survived.

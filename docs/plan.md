@@ -14,24 +14,25 @@ The installer source is `8d1a2437f8035c0eaf712c53248502c4c35ad669`. The packages
 
 ## Milestones
 
-| Deliverable | Owner | State on 2026-11-22 | Completion evidence or next gate |
+| Deliverable | Owner | State on 2026-11-23 | Completion evidence or next gate |
 | --- | --- | --- | --- |
 | Rust peer and client | Coven Host | Implemented and qualified | Python-compatible protocol and SQLite state, identity pinning, conditional writes and durable retry receipts. [Compatibility results](acceptance.md) |
 | Safe native replacement | Coven Host | Implemented and qualified | Linux exchange, macOS swap and journaled Windows replacement preserve recoverable bytes across editor races and interruption. [Platform results](acceptance.md) |
 | Native CLI, daemon and package integration | Coven | Packaged for the Host release | Daemon owns the root, token reference and polling worker. Same-user IPC advertises `hostSync` and exposes typed host operations. [Integration issue](https://github.com/OpenCoven/coven/issues/1805) |
-| Installed CLI and two-machine qualification | Host and Coven contributors | Passed for the pinned pair | See [tested revisions, environments and limits](acceptance.md). |
+| Installed CLI and SSH qualification | Host and Coven contributors | Installed runs and same-Mac guest SSH passed. Two physical machines remain open in [#12](https://github.com/OpenCoven/coven-host/issues/12) | See [tested revisions, environments and limits](acceptance.md). |
 | Library review and merge | Coven Host maintainer | Merged into main | [Host PR #1](https://github.com/OpenCoven/coven-host/pull/1) records the review history and merge commit on `main`. |
 | Desktop installation | Coven Host | [v0.1.2 published](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.2) | First launch, repeat setup, login synchronization, copyable diagnostics and offline installation passed. [Desktop qualification](acceptance.md#desktop-installers) |
 | Consumer review and distribution | Coven maintainer | Host installers available, original upstream integration merged | See the [Host release installation](setup.md). The [upstream integration PR](https://github.com/OpenCoven/coven/pull/1809) records the original merge. The deletion release uses the later consumer pin above. |
+| Contributor checks | Coven Host | Local runner and pull request CI | Run `scripts/check.sh --fast` from a full checkout. Linux contributors can run `scripts/check.sh --full` for interoperability and upgrade coverage. [Commands and prerequisites](acceptance.md#run-the-checks) |
 
 ## Next handoff
 
 The downloaded v0.1.2 release passed offline rename and delete-versus-edit recovery on Apple silicon/APFS, Linux x64 and ARM64/ext4, and x64 Windows/NTFS. The Windows installer runs in a per-user session. [Public installer checks](https://github.com/OpenCoven/coven-host/actions/runs/45050106799) · [Mac and SSH results](https://github.com/OpenCoven/coven-host/issues/5#issuecomment-7082956073)
 
-[Agent readiness #4](https://github.com/OpenCoven/coven-host/issues/4) tracks the shared contributor checks and backlog. Issues #9–#12 cover physical Intel, native x64 Windows, installer signing and physical-machine SSH qualification. The Project issuer decision D01 remains with Val and the design owners before [draft PR #16](https://github.com/OpenCoven/coven-host/pull/16) can proceed.
+BunsDev owns [multi-client coordination #6](https://github.com/OpenCoven/coven-host/issues/6). Start with a two-client regression against one peer. Take both clients offline, edit on one and delete on the other, reconnect in each order, and verify revision convergence and recoverable bytes for both resolution choices. Coordinate with BunsDev before editing the shared peer or schema. [Platform and signing handoffs](acceptance.md#remaining-operator-qualification) list the equipment and evidence needed for #9–#12. The Project issuer decision D01 remains with Val and the design owners before [draft PR #16](https://github.com/OpenCoven/coven-host/pull/16) can proceed.
 
 ## Scope for follow-up work
 
-Multi-client coordination, additional Castles and execution of uploaded documents have separate tracking issues. [Host backlog](https://github.com/OpenCoven/coven-host/issues)
+Contributors looking for unassigned engineering work can claim [additional Castles #7](https://github.com/OpenCoven/coven-host/issues/7). Begin with a path-policy test for two distinct Castle IDs and their separate quotas. Coordinate peer and schema changes with BunsDev on #6 and keep optional Project metadata separate from Castle identity. [Uploaded document execution #8](https://github.com/OpenCoven/coven-host/issues/8) starts with a reviewed security design.
 
 To verify #5 from a full checkout, run `./tests/compat-linux.sh --deletions` with Git, a Rust toolchain, Python 3.11+ and a filesystem supporting native replacement. It starts disposable Rust endpoints and checks both rename directions, conflict choices, acknowledgement loss and rollback. Run the script without arguments on Linux to include the historical Python pairings and stopped-installation upgrades.
