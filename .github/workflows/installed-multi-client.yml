@@ -2,6 +2,7 @@ name: Qualify two clients from the public desktop package
 on:
   push:
     branches: [qualification/6-published-clients]
+    paths: [.github/workflows/installed-multi-client.yml]
 permissions:
   contents: read
 jobs:
