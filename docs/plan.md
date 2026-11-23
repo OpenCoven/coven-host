@@ -33,6 +33,6 @@ BunsDev owns [multi-client coordination #6](https://github.com/OpenCoven/coven-h
 
 ## Scope for follow-up work
 
-Multi-client coordination, additional Castles and execution of uploaded documents have separate tracking issues. [Host backlog](https://github.com/OpenCoven/coven-host/issues)
+Contributors looking for unassigned engineering work can claim [additional Castles #7](https://github.com/OpenCoven/coven-host/issues/7). Begin with a path-policy test for two distinct Castle IDs and their separate quotas. Coordinate peer and schema changes with BunsDev on #6 and keep optional Project metadata separate from Castle identity. [Uploaded document execution #8](https://github.com/OpenCoven/coven-host/issues/8) starts with a reviewed security design.
 
 To verify #5 from a full checkout, run `./tests/compat-linux.sh --deletions` with Git, a Rust toolchain, Python 3.11+ and a filesystem supporting native replacement. It starts disposable Rust endpoints and checks both rename directions, conflict choices, acknowledgement loss and rollback. Run the script without arguments on Linux to include the historical Python pairings and stopped-installation upgrades.
