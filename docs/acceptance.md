@@ -58,6 +58,8 @@ The public v0.1.2 installer contains Coven CLI and production daemon build `9e14
 
 The downloaded AMD64 and ARM64 Debian packages passed the same four cases as ordinary users on native Ubuntu runners using ext4. Both packages also passed the independent profile-before-migration verifier from PR #27. [Installed Linux checks](https://github.com/OpenCoven/coven-host/actions/runs/45289998169)
 
+Two additional runs of the ARM64 package in a local container encountered a daemon IPC reset during status and a lifecycle-health timeout during initialization. The historical quota test also timed out in that guest. The hosted Linux runs used the original deadlines. [Qualification notes](https://github.com/OpenCoven/coven-host/issues/6#issuecomment-7117211723) · [Full Linux suite](https://github.com/OpenCoven/coven-host/actions/runs/45290371269)
+
 Both clients started at revision 1, disconnected, and made competing changes. The first client's response was dropped after the peer committed revision 2. The peer and clients restarted. The other client observed the conflict before the first retried its operation. The retry used the same operation ID. Each case used a fresh fixture, verified both client databases and the peer database, and repeated sync to check that the revision stayed stable. Every resolution preserved the edited bytes with SHA-256 `9cf697f3bab3fbb3fdcfe9e84b9ba63c40bd13211c11fc8a06b84b9b48c3219c`.
 
 | First change at the peer | Owner keeps | Both folders and peer after resolution |
