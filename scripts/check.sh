@@ -28,17 +28,16 @@ done
 
 passed=()
 not_run=()
-python=$(command -v python3 || command -v python || true)
-
 need_python() {
-    if [ -z "$python" ]; then
-        echo "The $1 step needs Python 3.11 or later on PATH." >&2
-        exit 1
-    fi
-    "$python" -c 'import sys; sys.exit(sys.version_info < (3, 11))' || {
-        echo "The $1 step needs Python 3.11 or later; found $("$python" --version 2>&1)." >&2
-        exit 1
-    }
+    local candidate
+    for candidate in python3 python; do
+        if "$candidate" -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
+            python=$candidate
+            return
+        fi
+    done
+    echo "The $1 step needs Python 3.11 or later on PATH." >&2
+    exit 1
 }
 
 run() {
@@ -75,7 +74,7 @@ for step in "${steps[@]}"; do
                 continue
             fi
             need_python compat
-            run ./tests/compat-linux.sh
+            run env COVEN_TEST_PYTHON="$python" ./tests/compat-linux.sh
             ;;
     esac
     passed+=("$step")

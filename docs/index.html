@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101015">
+  <meta name="description" content="Use Coven Host to sync an ordinary folder with one authenticated peer. Install the desktop release, edit offline, recover conflicts, and follow development.">
+  <title>Coven Host</title>
+  <link rel="icon" href="assets/crown.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/host.css">
+</head>
+<body id="top">
+  <a class="skip" href="#main">Skip to content</a>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="folder" viewBox="0 0 24 24"><path d="M3 7V5a1 1 0 0 1 1-1h5l3 3h8a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7Z"/><path d="M3 9h18"/></symbol>
+    <symbol id="book" viewBox="0 0 24 24"><path d="M12 6c-3-2-6-2-10-1v14c4-1 7-1 10 1 3-2 6-2 10-1V5c-4-1-7-1-10 1Zm0 0v14"/></symbol>
+  </svg>
+  <header class="site-header">
+    <nav class="wrap title-bar" aria-label="Main navigation">
+      <a class="brand" href="#top"><img src="assets/crown.svg" alt="" width="48" height="48">Coven Host</a>
+      <div class="section-links">
+        <a href="#install">Install</a>
+        <a href="#start">First sync</a>
+        <a href="#faq">FAQ</a>
+        <a href="#roadmap">Roadmap</a>
+      </div>
+      <a class="docs-link" href="https://docs.opencoven.ai">Docs <span aria-hidden="true">↗</span></a>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-heading">
+      <div class="wrap hero-grid">
+        <div class="intro">
+          <p class="eyebrow"><span class="dot"></span>Coven Host <span class="separator">/</span> <a href="https://github.com/OpenCoven/coven-host/releases/tag/v0.1.2">v0.1.2</a></p>
+          <h1 id="hero-heading">Your folder,<br><em>in sync.</em></h1>
+          <p class="lede">Save a document in your Coven folder. Host syncs it with a private peer on the same computer. Keep editing offline, or connect a Linux machine over SSH to exchange files across devices.</p>
+          <div class="actions">
+            <a class="primary" href="#install">Install Coven Host <span aria-hidden="true">→</span></a>
+            <a class="secondary" href="#start"><svg class="icon" aria-hidden="true"><use href="#book"/></svg>Try your first sync</a>
+          </div>
+        </div>
+        <figure class="sync-demo" aria-labelledby="sync-title">
+          <figcaption><strong id="sync-title">How folder sync works</strong><code>Castles/demo/</code></figcaption>
+          <fieldset class="sync-modes">
+            <legend class="visually-hidden">Explore a sync scenario</legend>
+            <label><input id="flow-send" name="flow" type="radio" aria-describedby="send-note" checked>Send</label>
+            <label><input id="flow-receive" name="flow" type="radio" aria-describedby="receive-note">Receive</label>
+            <label><input id="flow-offline" name="flow" type="radio" aria-describedby="offline-note">Offline</label>
+            <label><input id="flow-conflict" name="flow" type="radio" aria-describedby="conflict-note">Conflict</label>
+          </fieldset>
+          <div class="sync-map" aria-hidden="true">
+            <div class="sync-node">
+              <svg viewBox="0 0 72 64"><path class="surface" d="M8 22v-8a3 3 0 0 1 3-3h15l6 6h24a3 3 0 0 1 3 3v7"/><path class="sheet" d="M21 33V7h22l8 8v17M43 7v9h8m-24 6h15m-15 5h10"/><path class="surface" d="M7 25h22l5 5h29l-5 24H12Z"/></svg>
+              <strong>Your folder</strong>
+            </div>
+            <div class="sync-route local-route"><i></i></div>
+            <div class="sync-node daemon-node">
+              <svg viewBox="0 0 72 64"><path d="M23 6v7m9-7v7m9-7v7m9-7v7M23 51v7m9-7v7m9-7v7m9-7v7M9 21h8m-8 11h8m-8 11h8m38-22h8m-8 11h8m-8 11h8"/><rect class="surface" x="17" y="13" width="38" height="38" rx="6"/><path d="M26 28a11 11 0 0 1 19-3l2 3m0-7v7h-7m5 8a11 11 0 0 1-19 3l-2-3m0 7v-7h7"/></svg>
+              <strong>Host daemon</strong>
+            </div>
+            <div class="sync-route peer-route"><i></i></div>
+            <div class="sync-node">
+              <svg viewBox="0 0 72 64"><rect class="surface" x="10" y="9" width="52" height="21" rx="4"/><rect class="surface" x="10" y="34" width="52" height="21" rx="4"/><path d="M20 20h12m-12 25h12"/><circle class="lamp" cx="52" cy="20" r="2"/><circle class="lamp" cx="52" cy="45" r="2"/></svg>
+              <strong>Private peer</strong>
+            </div>
+          </div>
+          <div class="sync-notes">
+            <div class="flow-send"><code>files/field-note.md</code><p id="send-note">Save a note in your folder. The daemon detects the edit and sends it to the authenticated peer.</p></div>
+            <div class="flow-receive"><code>results/review.md</code><p id="receive-note">When someone adds a result on the peer, the daemon fetches it. Open the returned file in your usual editor.</p></div>
+            <div class="flow-offline"><code>files/field-note.md</code><p id="offline-note">Keep editing while the peer is offline. Your changes stay in the folder until the daemon can reconnect and reconcile them.</p></div>
+            <div class="flow-conflict"><code>files/field-note.md</code><p id="conflict-note">If both copies changed, Host preserves both versions. Run <code>coven host status</code> to find them, choose which to keep, then sync again.</p></div>
+          </div>
+        </figure>
+      </div>
+    </section>
+    <section id="install" class="wrap section" aria-labelledby="install-heading">
+      <div class="section-heading">
+        <div><p class="eyebrow">Desktop release · v0.1.2</p><h2 id="install-heading">Choose your installer.</h2></div>
+        <a class="text-link" href="https://github.com/OpenCoven/coven-host/blob/main/docs/setup.md">Full setup guide <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="packages">
+        <div class="package">
+          <h3>macOS</h3>
+          <p>Apple silicon or Intel, macOS 11 or later. Unzip the download and open Coven Host.</p>
+          <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-macOS.zip">Download for Mac <span>ZIP ↓</span></a>
+        </div>
+        <div class="package">
+          <h3>Windows</h3>
+          <p>x64 or Windows 11 on ARM with x64 emulation. Run the installer, then open Coven Host from Start.</p>
+          <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Windows-x64.exe">Download for Windows <span>EXE ↓</span></a>
+        </div>
+        <div class="package">
+          <h3>Ubuntu or Debian</h3>
+          <p>Install the package for your processor, then open Coven Host from Applications.</p>
+          <div class="linux-links">
+            <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-amd64.deb">Intel / AMD <span>DEB ↓</span></a>
+            <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-arm64.deb">ARM64 <span>DEB ↓</span></a>
+          </div>
+        </div>
+      </div>
+      <p class="install-note">Installing offline? <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Offline.zip">Download the offline kit</a>, extract the whole ZIP, and open <code>Start-Here.html</code>.</p>
+    </section>
+    <section id="start" class="operator-section" aria-labelledby="start-heading">
+      <div class="wrap operator-grid">
+        <div>
+          <p class="eyebrow">First sync</p><h2 id="start-heading">Send a field note.</h2>
+          <ol class="walkthrough">
+            <li>Open Coven Host. Setup starts the peer and opens your <strong>Coven</strong> folder.</li>
+            <li>Open <code>Castles/demo/files/</code>. In any text editor, write a line and save it there as <code>field-note.md</code>. Host picks up the edit automatically.</li>
+            <li>Reopen Coven Host to check the setup. If you use the Host CLI with this folder’s profile, run <code>coven host sync</code>, then <code>coven host status</code>. When sync finishes successfully, the phase reads <code>synced</code>.</li>
+          </ol>
+        </div>
+        <figure class="folder-map">
+          <figcaption class="plate-label"><svg class="icon" aria-hidden="true"><use href="#folder"/></svg>Inside your Coven folder</figcaption>
+          <pre aria-label="Example file layout"><code>Castles/demo/
+├── files/
+│   └── <strong>field-note.md</strong>
+└── results/</code></pre>
+          <p>Open <code>results/</code> for files the peer sends back. It can stay empty until someone adds a result.</p>
+        </figure>
+      </div>
+    </section>
+    <section id="faq" class="wrap section faq" aria-labelledby="faq-heading">
+      <div><p class="eyebrow">FAQ</p><h2 id="faq-heading">Using Host.</h2></div>
+      <div class="questions">
+        <details>
+          <summary>Can I sync with a second computer?</summary>
+          <p>Yes. The desktop setup keeps both copies on one computer. For a two-machine setup, run the Host CLI on both systems, verify the server’s SSH host key, and connect through a tunnel. <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/operations.md#connect-through-ssh">Follow the SSH walkthrough.</a></p>
+        </details>
+        <details>
+          <summary>What happens if I edit offline?</summary>
+          <p>Keep working in your usual editor. Host reconciles changes when the peer returns. If both sides edited the same file, use <code>coven host status</code> to find both versions, then choose the local, remote, or merged copy. <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/operations.md#sync-and-recover">Resolve a conflict.</a></p>
+        </details>
+        <details>
+          <summary>What happens when I delete or rename a file?</summary>
+          <p>When both endpoints support deletion, the next sync creates the renamed path and removes the old one. If a deletion conflicts with an edit, Host keeps a recovery copy and lets you choose the outcome. <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/operations.md#recover-a-deletion-or-rename">Recover a deletion or rename.</a></p>
+        </details>
+        <details>
+          <summary>Why was my file skipped?</summary>
+          <p>Save it under <code>Castles/demo/files/</code> or <code>Castles/demo/results/</code>. Use lowercase names such as <code>field-note.md</code> and keep each file within 10 MiB. Host skips dotfiles, credential-like names, and other excluded paths. <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/operations.md#sync-boundaries">Check names, exclusions, and limits.</a></p>
+        </details>
+        <details>
+          <summary>What if the installer won’t open?</summary>
+          <p>The Windows v0.1.2 installer is unsigned. Use the <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/acceptance.md#verify-a-release-download">checksum verification steps</a> if Windows shows a publisher warning. For other startup problems, the <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/setup.md#when-a-package-cannot-open">setup guide</a> covers platform requirements, portable Linux packages, and diagnostics.</p>
+        </details>
+      </div>
+    </section>
+    <section id="roadmap" class="wrap section" aria-labelledby="roadmap-heading">
+      <div class="section-heading"><div><p class="eyebrow">Roadmap · <time datetime="2026-11-20">Nov 20, 2026</time></p><h2 id="roadmap-heading">Where Host goes next.</h2></div><a class="text-link" href="https://github.com/OpenCoven/coven-host/blob/main/docs/plan.md">Delivery plan <span aria-hidden="true">↗</span></a></div>
+      <dl class="roadmap">
+        <div><dt><span class="dot"></span>Shipped</dt><dd><h3>One folder, one peer</h3><p>The v0.1.2 installers synchronize offline renames and deletions. Recovery passed on Apple silicon, Linux x64 and ARM64, and Windows x64 on NTFS.</p><a class="text-link" href="https://github.com/OpenCoven/coven-host/blob/main/docs/acceptance.md#desktop-installers">See tested platforms and limits <span aria-hidden="true">↗</span></a></dd></div>
+        <div><dt><span class="dot"></span>Merged</dt><dd><h3>Upstream Coven integration</h3><p>The Host release includes the CLI and daemon. The deletion support in these installers has merged into Coven main.</p><a class="text-link" href="https://github.com/OpenCoven/coven/pull/1815">View the merged integration <span aria-hidden="true">↗</span></a></dd></div>
+        <div><dt><span class="dot later"></span>Proposed</dt><dd><h3>Beyond the demo Castle</h3><p>Open proposals cover <a href="https://github.com/OpenCoven/coven-host/issues/7">additional Castles</a>, <a href="https://github.com/OpenCoven/coven-host/issues/6">multiple clients</a>, and <a href="https://github.com/OpenCoven/coven-host/issues/8">execution of uploaded documents</a>.</p></dd></div>
+      </dl>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap footer">
+      <a class="text-link" href="https://opencoven.ai">OpenCoven <span aria-hidden="true">↗</span></a>
+      <a class="text-link" href="https://github.com/OpenCoven/coven-host">View source on GitHub <span aria-hidden="true">↗</span></a>
+      <a class="text-link" href="#top">Back to top <span aria-hidden="true">↑</span></a>
+    </div>
+  </footer>
+</body>
+</html>

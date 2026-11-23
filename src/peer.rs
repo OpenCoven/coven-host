@@ -67,6 +67,8 @@ struct Row {
 struct Inventory {
     host: String,
     files: Vec<Row>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    deleted: Option<BTreeMap<String, i64>>,
 }
 
 #[derive(Debug)]
@@ -116,6 +118,7 @@ pub struct Peer {
     client: Client,
     base: String,
     pub identity: Option<String>,
+    pub(crate) deleted: Option<BTreeMap<String, i64>>,
 }
 
 impl Peer {
@@ -136,6 +139,7 @@ impl Peer {
             client,
             base: format!("{}{PREFIX}", url.trim_end_matches('/')),
             identity,
+            deleted: None,
         })
     }
 
@@ -181,9 +185,14 @@ impl Peer {
     }
 
     pub fn inventory(&mut self) -> Result<BTreeMap<String, Item>> {
-        let (body, _) = self.request(Method::GET, None, HeaderMap::new(), None, INVENTORY_LIMIT)?;
-        let Inventory { host, files } =
-            serde_json::from_slice(&body).context("invalid host inventory")?;
+        let mut headers = HeaderMap::new();
+        headers.insert("x-coven-deletions", HeaderValue::from_static("1"));
+        let (body, _) = self.request(Method::GET, None, headers, None, INVENTORY_LIMIT * 3)?;
+        let Inventory {
+            host,
+            files,
+            deleted,
+        } = serde_json::from_slice(&body).context("invalid host inventory")?;
         ensure!(
             lower_hex(&host, 32) && files.len() <= MAX_FILES,
             "invalid host inventory"
@@ -212,6 +221,17 @@ impl Peer {
                 "duplicate path in host inventory"
             );
         }
+        if let Some(entries) = &deleted {
+            ensure!(entries.len() <= 2000, "invalid deletion inventory");
+            for (path, rev) in entries {
+                validate_path(path)?;
+                ensure!(
+                    (2..REVISION_LIMIT).contains(rev) && !result.contains_key(path),
+                    "invalid deleted path metadata"
+                );
+            }
+        }
+        self.deleted = deleted;
         self.identity = Some(host);
         Ok(result)
     }
@@ -226,6 +246,24 @@ impl Peer {
             "{path}: host file changed or transfer failed verification; sync again"
         );
         Ok(data)
+    }
+
+    pub fn delete(&self, path: &str, expected: i64, operation: &str) -> Result<()> {
+        ensure!(
+            (1..REVISION_LIMIT).contains(&expected),
+            "invalid host revision"
+        );
+        ensure!(lower_hex(operation, 32), "invalid operation ID");
+        let mut headers = HeaderMap::new();
+        headers.insert("if-match", format!("\"{expected}\"").parse()?);
+        headers.insert("x-sync-operation", operation.parse()?);
+        let (body, _) = self.request(Method::DELETE, Some(path), headers, None, INVENTORY_LIMIT)?;
+        let ack: serde_json::Value = serde_json::from_slice(&body)?;
+        ensure!(
+            ack == json!({"revision": expected + 1, "deleted": true}),
+            "invalid deletion acknowledgement; retry reconciliation"
+        );
+        Ok(())
     }
 
     pub fn upload(

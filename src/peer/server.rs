@@ -48,6 +48,9 @@ impl Host {
             CREATE TABLE IF NOT EXISTS instance (slot INTEGER PRIMARY KEY, id TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS files (
                 path TEXT PRIMARY KEY, revision INTEGER NOT NULL, sha256 TEXT NOT NULL, bytes BLOB NOT NULL);
+            CREATE TABLE IF NOT EXISTS deleted_versions (
+                path TEXT NOT NULL, revision INTEGER NOT NULL, sha256 TEXT NOT NULL,
+                bytes BLOB NOT NULL, operation TEXT NOT NULL UNIQUE, PRIMARY KEY(path, revision));
             CREATE TABLE IF NOT EXISTS receipt (
                 slot INTEGER PRIMARY KEY, operation TEXT NOT NULL, path TEXT NOT NULL,
                 expected INTEGER NOT NULL, sha256 TEXT NOT NULL);")?;
@@ -64,7 +67,7 @@ impl Host {
         })
     }
 
-    fn get(&self, path: Option<&str>) -> Result<Response> {
+    fn get(&self, path: Option<&str>, include_deleted: bool) -> Result<Response> {
         let db = self
             .db
             .lock()
@@ -112,8 +115,71 @@ impl Host {
             serde_json::to_value(Inventory {
                 host: self.id.clone(),
                 files,
+                deleted: if include_deleted {
+                    let mut q = db.prepare("SELECT d.path, max(d.revision) FROM deleted_versions d WHERE NOT EXISTS (SELECT 1 FROM files f WHERE f.path=d.path) GROUP BY d.path")?;
+                    Some(
+                        q.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                            .collect::<rusqlite::Result<_>>()?,
+                    )
+                } else {
+                    None
+                },
             })?,
         ))
+    }
+
+    fn delete(&self, path: &str, expected: i64, operation: &str) -> Result<Response> {
+        let mut db = self
+            .db
+            .lock()
+            .map_err(|_| anyhow::anyhow!("host database lock failed"))?;
+        let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let revision = expected + 1;
+        let ack = || {
+            json_reply(
+                StatusCode::OK,
+                json!({"revision": revision, "deleted": true}),
+            )
+        };
+        if let Some((prior_path, prior_revision)) = tx
+            .query_row(
+                "SELECT path, revision FROM deleted_versions WHERE operation=?",
+                [operation],
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)),
+            )
+            .optional()?
+        {
+            return Ok(if prior_path == path && prior_revision == revision {
+                ack()
+            } else {
+                error(409, "operation ID already used for a different deletion")
+            });
+        }
+        let size: Option<i64> = tx
+            .query_row(
+                "SELECT length(bytes) FROM files WHERE path=? AND revision=?",
+                params![path, expected],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let Some(size) = size else {
+            return Ok(error(412, "remote revision changed; sync again"));
+        };
+        let (count, total): (i64, i64) = tx.query_row(
+            "SELECT count(*), coalesce(sum(length(bytes)),0) FROM deleted_versions",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        if count >= 2000 || total + size > MAX_TOTAL as i64 {
+            return Ok(error(413, "peer deletion recovery archive is full"));
+        }
+        tx.execute(
+            "INSERT INTO deleted_versions SELECT path, ?, sha256, bytes, ? FROM files WHERE path=?",
+            params![revision, operation, path],
+        )?;
+        tx.execute("DELETE FROM files WHERE path=?", [path])?;
+        tx.commit()?;
+        Ok(ack())
     }
 
     fn put(&self, path: &str, upload: &Upload, data: &[u8]) -> Result<Response> {
@@ -165,10 +231,18 @@ impl Host {
                 }
             }
         }
+        let creating = current == 0;
+        if creating {
+            current = tx.query_row(
+                "SELECT coalesce(max(revision),0) FROM deleted_versions WHERE path=?",
+                [path],
+                |r| r.get(0),
+            )?;
+        }
         if current != upload.expected {
             return Ok(error(412, "remote revision changed; sync again"));
         }
-        if (current == 0 && count >= MAX_FILES) || total > MAX_TOTAL as i64 {
+        if (creating && count >= MAX_FILES) || total > MAX_TOTAL as i64 {
             return Ok(error(413, "Castle exceeds 100 MiB or 1000 files"));
         }
         tx.execute(
@@ -263,10 +337,11 @@ async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
         return error(401, "credentials rejected; check the protected token file");
     }
     let put = parts.method == Method::PUT;
-    if parts.method != Method::GET && !put {
+    let delete = parts.method == Method::DELETE;
+    if parts.method != Method::GET && !put && !delete {
         return error(405, "unsupported method");
     }
-    if (put || headers.contains_key("x-host-id"))
+    if (put || delete || headers.contains_key("x-host-id"))
         && single(headers, "x-host-id") != Some(host.id.as_str())
     {
         return error(
@@ -275,7 +350,7 @@ async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
         );
     }
     let route = parts.uri.path_and_query().map(|p| p.as_str()).unwrap_or("");
-    let path = if route == PREFIX && !put {
+    let path = if route == PREFIX && !put && !delete {
         None
     } else {
         let Some(path) = route.strip_prefix(PREFIX).and_then(|s| s.strip_prefix('/')) else {
@@ -286,7 +361,17 @@ async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
         }
         Some(path)
     };
-    let result = if put {
+    let result = if delete {
+        let expected = single(headers, "if-match")
+            .and_then(|value| value.strip_prefix('"')?.strip_suffix('"'))
+            .and_then(|s| s.parse::<i64>().ok())
+            .filter(|v| (1..super::REVISION_LIMIT).contains(v));
+        let op = single(headers, "x-sync-operation").filter(|s| lower_hex(s, 32));
+        let (Some(expected), Some(op)) = (expected, op) else {
+            return error(400, "expected revision and deletion operation ID required");
+        };
+        host.delete(path.expect("DELETE has file path"), expected, op)
+    } else if put {
         let Some(upload) = Upload::from_headers(headers) else {
             return error(400, "invalid length, revision, hash or operation");
         };
@@ -304,7 +389,7 @@ async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
         }
         host.put(path.expect("PUT has file path"), &upload, &data)
     } else {
-        host.get(path)
+        host.get(path, single(headers, "x-coven-deletions") == Some("1"))
     };
     result.unwrap_or_else(|_| error(500, "host storage error"))
 }

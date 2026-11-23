@@ -32,16 +32,22 @@ The platform chooser passed browser checks for supported and unsupported systems
 
 Apple accepted the signed macOS app. After stapling the ticket, the release maintainer extracted the final archive and verified its code signature for both architectures. Gatekeeper accepted it as Notarized Developer ID from Soul Protocol LLC. The shipping app uses the signed-in account. The private test profile is confined to the separate verifier. [Apple submission run](https://github.com/OpenCoven/chat/actions/runs/44323270011)
 
+### Desktop installer v0.1.2
+
+Public downloads passed the signed release manifest checks. The stapled Mac app passed Gatekeeper and upgraded v0.1.1 on Apple silicon/APFS. Two Castle folders converged after disconnected renames in both directions. A delete-versus-edit conflict preserved the edited bytes after explicit resolution. The same release recovered across an SSH disconnect to an ARM64 Linux guest on the Mac. [Release and checksums](https://github.com/OpenCoven/coven-host/releases/tag/v0.1.2) · [Mac recovery evidence](https://github.com/OpenCoven/coven-host/issues/5#issuecomment-7082956073)
+
+The published offline kit installed on native Linux x64 and ARM64 runners using ext4. On an x64 Windows Server runner using NTFS, a standard user upgraded from v0.1.1, recovered a held-open file after releasing its handle and completed both sync journeys. The Windows EXE is unsigned. Physical Intel Mac and separate physical-host SSH qualification remain open. [Public Windows and Linux download runs](https://github.com/OpenCoven/coven-host/actions/runs/45050106799) · [Exact package and build identities](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/installer-receipt.json)
+
 ### Verify a release download
 
-The annotated release tag signs the SHA-256 digest of the release asset named `SHA256SUMS`. Use the verified tag in the private repository as the reference. Compare the digest printed for the manifest with the value in the signed tag message, then compare the selected installer with its entry in that manifest. The checksum file inside the offline ZIP covers the files in the extracted kit.
+The annotated release tag signs the SHA-256 digest of the release asset named `SHA256SUMS`. Use the verified release tag as the reference. Compare the digest printed for the manifest with the value in the signed tag message, then compare the selected installer with its entry in that manifest. The checksum file inside the offline ZIP covers the files in the extracted kit.
 
 With the Windows installer and the release manifest in Downloads, open PowerShell in that directory and run the following commands. The final two lines should show the same installer digest, ignoring letter case.
 
 ```powershell
 Get-FileHash .\SHA256SUMS -Algorithm SHA256
-Get-FileHash .\Coven-Host-0.1.1-Windows-x64.exe -Algorithm SHA256
-Select-String -Path .\SHA256SUMS -Pattern '  Coven-Host-0\.1\.1-Windows-x64\.exe$'
+Get-FileHash .\Coven-Host-0.1.2-Windows-x64.exe -Algorithm SHA256
+Select-String -Path .\SHA256SUMS -Pattern '  Coven-Host-0\.1\.2-Windows-x64\.exe$'
 ```
 
 On macOS, run `shasum -a 256 SHA256SUMS` to check the manifest itself. After extracting the offline kit, run `shasum -a 256 -c SHA256SUMS` from the extracted folder. On Linux, use `sha256sum` in place of `shasum -a 256`.
@@ -52,13 +58,24 @@ The macOS client opened a strict host-key-checked SSH forward to a Linux guest. 
 
 The walkthrough passed against x86-64 and ARM Linux guests. The client and guests shared one physical Mac. To repeat it, follow the [SSH setup](operations.md#connect-through-ssh), record the peer identity and file hash before disconnection, then compare the identity, revision and file bytes on reconnect and after resolution.
 
+## Remaining operator qualification
+
+| Issue | Prerequisite | Evidence to record |
+| --- | --- | --- |
+| [#9](https://github.com/OpenCoven/coven-host/issues/9) | Physical Intel Mac and universal installer | Record macOS version and executable digest, fresh and repeat setup, both transfer directions, login sync and copyable diagnostics. The Intel run under Rosetta used an Apple silicon host. |
+| [#10](https://github.com/OpenCoven/coven-host/issues/10) | Native x64 Windows 11 hardware with NTFS | BunsDev owns the complete installed and desktop scenario set plus folder and library tests. Record Windows build, volume, installer digest, results and inapplicable cases. Hosted x64 Windows Server installation, upgrade and recovery results are recorded separately in the release handoff. |
+| [#11](https://github.com/OpenCoven/coven-host/issues/11) | Signing custodian with a protected Authenticode identity | BunsDev coordinates a signed test EXE, valid `Get-AuthenticodeSignature` result, documented verification and passing `scripts/check.sh kit`. |
+| [#12](https://github.com/OpenCoven/coven-host/issues/12) | Two separate physical machines, SSH access and disposable profiles | Record both hosts and the network path, then compare peer identity, revisions and hashes after disconnect, peer restart, reconnect and conflict resolution. |
+
+To repeat installed deletion recovery, run `python3 tests/installed_profile_recovery.py "$INSTALLED_COVEN"` with the absolute path to the installed CLI and `TMPDIR` on the volume under test. The harness starts disposable profiles, an authenticated peer and the production daemon. It checks competing-profile refusal before migration, offline rename and deletion in both directions, both conflict choices, exact displaced bytes and repeat-sync convergence. Match your installer digest to the [published release receipt](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/installer-receipt.json).
+
 ## Linux compatibility
 
 The Python client passed all ten reference scenarios against the Rust peer. The Rust client passed nine reference scenarios against each peer implementation. Native filesystem race tests exercise the exchange case that the reference suite injects into Python. Rust also opened stopped Python state with a pending upload acknowledgement and an open conflict, and detected both an older peer snapshot and a changed digest at the same conflict revision.
 
 ## Run the checks
 
-From the repository root, run `scripts/check.sh` on the target OS. CI runs the same script on every pull request, so a local pass and a CI pass mean the same thing.
+From the repository root, run `scripts/check.sh` on the target OS. The pull request workflow calls its named steps across three operating systems.
 
 | Command | Steps | Requirements |
 | --- | --- | --- |

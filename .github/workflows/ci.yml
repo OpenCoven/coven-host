@@ -2,6 +2,7 @@ name: CI
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
   workflow_dispatch:
@@ -10,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 env:
@@ -99,4 +100,11 @@ jobs:
             range="$BASE..$HEAD"
           fi
           echo "Scanning $range"
-          gitleaks git --config .gitleaks.toml --ignore-gitleaks-allow --redact=100 --no-banner --log-opts="$range" .
+          commits=$(git rev-list "$range")
+          for revision in $commits; do
+            if ! .githooks/check-private-paths diff-tree --root --diff-merges=first-parent -r --quiet --no-renames --diff-filter=ACMT "$revision"; then
+              echo "Private path check failed at $revision" >&2
+              exit 1
+            fi
+          done
+          gitleaks git --config .gitleaks.toml --ignore-gitleaks-allow --redact=100 --no-banner --log-opts="--diff-merges=first-parent $range" .

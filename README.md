@@ -13,4 +13,8 @@ The Rust library in this repository implements file transfer, reconciliation and
 | Find source, tests and related work before editing | [Agent and contributor guide](AGENTS.md) |
 | Check which binaries, platforms and behaviors passed | [Acceptance report and verification commands](docs/acceptance.md) |
 
-The MVP supports a single client, peer and Castle. Creates and updates propagate in both directions. A deletion is reported for resolution and the peer keeps its copy.
+The MVP supports a single client, peer and Castle. When both endpoints support deletion, edits, renames and deletions synchronize in either direction. If one side deletes a file while the other edits it, the CLI reports where to recover the edited bytes and lets you choose the outcome. [Recover a deletion or rename](docs/operations.md#recover-a-deletion-or-rename)
+
+## Preview the Host landing page
+
+Open [the landing page](docs/index.html) from a local checkout, or run `python3 -m http.server --directory docs 8000` and visit [localhost](http://localhost:8000/).
