@@ -6,6 +6,7 @@ from http.server import HTTPServer
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import threading
 import unittest
@@ -117,7 +118,8 @@ def scenario(binary, work, adapter, conflicted):
 
 def exercise(binary, adapter=False):
     for conflicted in ("demo", "research"):
-        with tempfile.TemporaryDirectory(prefix="named-castles-") as temp:
+        # Darwin limits the canonical daemon socket path to 103 bytes.
+        with tempfile.TemporaryDirectory(prefix="ch7-", dir="/tmp" if sys.platform == "darwin" else None) as temp:
             scenario(Path(binary).resolve(), Path(temp).resolve(), adapter, conflicted)
 
 
