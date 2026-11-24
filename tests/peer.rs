@@ -368,11 +368,18 @@ fn castle_credentials_quotas_and_retry_receipts_are_independent_on_one_listener(
         (&research, TOKEN.to_owned(), 1),
         (&demo, research_token(), 0),
     ] {
-        let mut wrong =
-            Peer::for_castle(castle, &server.1, token, identities[index].clone()).unwrap();
+        let mut wrong = Peer::for_castle(castle, &server.1, token, None).unwrap();
         let item = clients[index].inventory().unwrap().remove(path).unwrap();
-        assert!(wrong.inventory().is_err());
-        assert!(wrong.download(path, &item).is_err());
+        // A fresh reader has only its credential. A stale identity pin cannot mask a routing leak.
+        assert!(wrong.inventory().unwrap_err().to_string().contains("404"));
+        assert!(
+            wrong
+                .download(path, &item)
+                .unwrap_err()
+                .to_string()
+                .contains("404")
+        );
+        wrong.identity = identities[index].clone();
         assert!(wrong.upload(path, b"wrong", 1, None).is_err());
         assert!(wrong.delete(path, 1, op).is_err());
     }
