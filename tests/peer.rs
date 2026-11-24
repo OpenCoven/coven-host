@@ -10,14 +10,33 @@ const TOKEN: &str = "test-token-for-peer-protocol-compatibility-123456789";
 #[test]
 fn server_process() {
     if let Some(storage) = std::env::var_os("COVEN_PEER_TEST_DIR") {
-        serve(Path::new(&storage), 0, TOKEN.into()).unwrap();
+        if std::env::var_os("COVEN_TEST_NAMED").is_some() {
+            coven_host::peer::serve_castles(
+                Path::new(&storage),
+                0,
+                vec![
+                    (Default::default(), TOKEN.into()),
+                    ("research".parse().unwrap(), research_token()),
+                ],
+            )
+            .unwrap();
+        } else {
+            serve(Path::new(&storage), 0, TOKEN.into()).unwrap();
+        }
     }
 }
 
 struct Server(Child, String);
 impl Server {
     fn start(storage: &Path) -> Self {
-        let child = Command::new(std::env::current_exe().unwrap())
+        Self::configured(storage, false)
+    }
+    fn configured(storage: &Path, named: bool) -> Self {
+        let mut command = Command::new(std::env::current_exe().unwrap());
+        if named {
+            command.env("COVEN_TEST_NAMED", "1");
+        }
+        let child = command
             .args(["--exact", "server_process", "--nocapture"])
             .env("COVEN_PEER_TEST_DIR", storage)
             .stdout(Stdio::piped())
@@ -31,7 +50,11 @@ impl Server {
                 output.read_line(&mut line).unwrap() > 0,
                 "server exited before listening"
             );
-            if let Some(addr) = line.trim().strip_prefix("Serving Castle demo on ") {
+            if let Some(addr) = line.trim().strip_prefix(if named {
+                "Serving Castle demo, research on "
+            } else {
+                "Serving Castle demo on "
+            }) {
                 server.1 = format!("http://{addr}");
                 return server;
             }
@@ -311,4 +334,100 @@ fn deletion_receipt_survives_restart_and_recreation() {
         )
         .unwrap();
     assert_eq!(retained, b"archive me");
+}
+
+fn research_token() -> String {
+    format!("{TOKEN}-research")
+}
+
+#[test]
+fn castle_credentials_quotas_and_retry_receipts_are_independent_on_one_listener() {
+    use coven_host::{CastleId, MAX_FILES, digest};
+    let temp = tempfile::tempdir().unwrap();
+    let storage = temp.path().canonicalize().unwrap().join("peer");
+    let research: CastleId = "research".parse().unwrap();
+    let demo = CastleId::default();
+    let server = Server::configured(&storage, true);
+    let path = "files/note.md";
+    let op = "12341234123412341234123412341234";
+    let peers = |server: &Server| {
+        [
+            server.peer(),
+            Peer::for_castle(&research, &server.1, research_token(), None).unwrap(),
+        ]
+    };
+    let mut clients = peers(&server);
+    let bytes: [&[u8]; 2] = [b"demo content", b"research content"];
+    for (client, data) in clients.iter_mut().zip(bytes) {
+        assert!(client.inventory().unwrap().is_empty());
+        client.upload(path, data, 0, Some(op)).unwrap();
+    }
+    let identities = clients.each_ref().map(|p| p.identity.clone());
+    assert_ne!(identities[0], identities[1]);
+    for (castle, token, index) in [
+        (&research, TOKEN.to_owned(), 1),
+        (&demo, research_token(), 0),
+    ] {
+        let mut wrong = Peer::for_castle(castle, &server.1, token, None).unwrap();
+        let item = clients[index].inventory().unwrap().remove(path).unwrap();
+        // A fresh reader has only its credential. A stale identity pin cannot mask a routing leak.
+        assert!(wrong.inventory().unwrap_err().to_string().contains("404"));
+        assert!(
+            wrong
+                .download(path, &item)
+                .unwrap_err()
+                .to_string()
+                .contains("404")
+        );
+        wrong.identity = identities[index].clone();
+        assert!(wrong.upload(path, b"wrong", 1, None).is_err());
+        assert!(wrong.delete(path, 1, op).is_err());
+    }
+    drop(server);
+    let server = Server::configured(&storage, true);
+    let mut clients = peers(&server);
+    for (index, (client, data)) in clients.iter_mut().zip(bytes).enumerate() {
+        let item = client.inventory().unwrap().remove(path).unwrap();
+        assert_eq!(client.identity, identities[index]);
+        client.upload(path, data, 0, Some(op)).unwrap();
+        assert_eq!(item.revision, 1);
+        assert_eq!(client.download(path, &item).unwrap(), data);
+    }
+    // Fill the demo index up to its real file limit in a single fixture transaction.
+    let mut db = rusqlite::Connection::open(storage.join("host.sqlite")).unwrap();
+    let tx = db.transaction().unwrap();
+    let sha = digest(b"");
+    for i in 1..MAX_FILES {
+        tx.execute(
+            "INSERT INTO files VALUES (?, 1, ?, x'')",
+            (format!("files/filler-{i}"), &sha),
+        )
+        .unwrap();
+    }
+    tx.commit().unwrap();
+    let extra = "files/extra";
+    let rejected = clients[0].upload(extra, b"extra", 0, None).unwrap_err();
+    assert!(rejected.to_string().contains("413"));
+    clients[1].upload(extra, b"extra", 0, None).unwrap();
+    assert_eq!(clients[0].inventory().unwrap().len(), MAX_FILES);
+    let item = clients[1].inventory().unwrap().remove(extra).unwrap();
+    assert_eq!(clients[1].download(extra, &item).unwrap(), b"extra");
+}
+
+#[test]
+fn duplicate_registration_fails_before_creating_peer_storage() {
+    let temp = tempfile::tempdir().unwrap();
+    let storage = temp.path().join("unused");
+    for (name, token) in [("demo", research_token()), ("research", TOKEN.into())] {
+        let result = coven_host::peer::serve_castles(
+            &storage,
+            0,
+            vec![
+                (Default::default(), TOKEN.into()),
+                (name.parse().unwrap(), token),
+            ],
+        );
+        assert!(result.is_err());
+        assert!(!storage.exists());
+    }
 }

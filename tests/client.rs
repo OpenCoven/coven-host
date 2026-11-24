@@ -192,3 +192,72 @@ fn offline_reopen_adds_deletion_tables_and_reports_outstanding_receipt() {
     assert_eq!(status["pendingPaths"], 1);
     assert!(!root.join("Castles/demo/files/old").exists());
 }
+
+#[test]
+fn two_castles_share_root_ownership_but_preserve_independent_local_state() {
+    let temp = tempfile::tempdir().unwrap();
+    let base = temp.path().canonicalize().unwrap();
+    let root = base.join("Coven");
+    let state = base.join("profile/host");
+    let profile = || Client::for_profile(&state, &base.join("profile"));
+    let research = || profile().for_castle(&"research".parse().unwrap());
+    Client::new(&state).initialize(&root).unwrap();
+    assert!(
+        research().initialize(&root).is_err(),
+        "adopt legacy demo before adding another Castle"
+    );
+    profile().initialize(&root).unwrap();
+    research().initialize(&root).unwrap();
+    let manifest = root.join("Castles/research/castle.json");
+    let metadata =
+        br#"{"version":1,"id":"research","project":{"id":"local-reference"},"extra":[1,2]}"#;
+    fs::write(&manifest, metadata).unwrap();
+    research().initialize(&root).unwrap();
+    assert_eq!(fs::read(&manifest).unwrap(), metadata);
+    fs::write(root.join("Castles/demo/files/note.md"), b"demo").unwrap();
+    assert_eq!(profile().status().unwrap()["pendingPaths"], 1);
+    let status = research().status().unwrap();
+    assert_eq!(status["castle"], "research");
+    assert_eq!(status["pendingPaths"], 0);
+    assert_ne!(profile().status().unwrap()["recovery"], status["recovery"]);
+    let other = Client::for_profile(&base.join("other/host"), &base.join("other"))
+        .for_castle(&"third".parse().unwrap());
+    assert!(other.initialize(&root).is_err());
+    assert!(!root.join("Castles/third").exists());
+    fs::write(&manifest, br#"{"version":1,"id":"demo"}"#).unwrap();
+    assert_eq!(research().status().unwrap()["phase"], "needs attention");
+    assert_eq!(profile().status().unwrap()["pendingPaths"], 1);
+}
+
+#[test]
+fn restored_database_cannot_be_reused_under_a_sibling_castle_id() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = tmp.path().canonicalize().unwrap();
+    let state = base.join("state");
+    let root = base.join("Coven");
+    let client = |name: &str| {
+        Client::for_profile(&state, &base.join("profile")).for_castle(&name.parse().unwrap())
+    };
+    for name in ["demo", "research"] {
+        client(name).initialize(&root).unwrap();
+    }
+    let named = state.join("castles/research/client.sqlite");
+    let demo = state.join("client.sqlite");
+    fs::copy(&named, &demo).unwrap();
+    assert!(
+        client("demo")
+            .status()
+            .unwrap_err()
+            .to_string()
+            .contains("different Castle")
+    );
+    assert!(client("demo").initialize(&root).is_err());
+    // An untagged historical demo database must also stay in demo.
+    rusqlite::Connection::open(&demo)
+        .unwrap()
+        .execute("DELETE FROM settings WHERE key='castle'", [])
+        .unwrap();
+    fs::copy(&demo, &named).unwrap();
+    assert!(client("research").initialize(&root).is_err());
+    client("demo").status().unwrap();
+}

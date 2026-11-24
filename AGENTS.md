@@ -40,6 +40,14 @@ Run `scripts/check.sh` before handing off; it runs the [verification commands](d
 
 For a two-client change, run `scripts/check.sh --full` on Linux. The native adapter exercises both reconnect orders, both conflict choices and a lost acknowledgement during that matrix. Repeat with `python3 tests/test_multi_client.py "$INSTALLED_COVEN"`, using the absolute path to the installed CLI and a temporary directory on the filesystem under test. Use `python3 tests/installed_profile_recovery.py "$INSTALLED_COVEN"` to verify ownership before migration and recovery against the installed daemon.
 
+For named Castles, run the focused Rust suites and the installed two-Castle recovery journey below. The journey creates temporary profiles, drops a committed acknowledgement, restarts both endpoints and checks both recovery copies and revisions. Pass the actual candidate installation's CLI path.
+
+```sh
+cargo test --locked --test path_policy --test peer --test client --test folder
+python3 tests/test_named_castles.py /absolute/path/to/installed/coven
+python3 tests/test_multi_client.py /absolute/path/to/installed/coven
+```
+
 ## Publishing a handoff
 
 Link the tracking issue and identify any consumer pin separately from the PR head. Record whether evidence came from source tests, a packaged binary, a real daemon or a remote peer. For Markdown, keep each ordinary paragraph on one source line and inspect the final rendered body. Use separate list items, table rows and code fences where they carry meaning.

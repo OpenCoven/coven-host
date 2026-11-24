@@ -1,6 +1,7 @@
 //! Loopback peer service. The on-disk schema and retry receipt are shared with the Python host.
 use std::{
-    fs::OpenOptions,
+    collections::BTreeSet,
+    fs::{File, OpenOptions},
     io::Write,
     net::Ipv4Addr,
     path::Path,
@@ -27,24 +28,50 @@ use serde_json::{Value, json};
 use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
-use super::{Inventory, Item, PREFIX, Row, TIMEOUT, lower_hex};
-use crate::{MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
+use super::{Inventory, Item, Row, TIMEOUT, lower_hex};
+use crate::{CastleId, MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
 
 struct Host {
+    route: String,
     db: Mutex<Connection>,
     id: String,
     authorization: String,
 }
 
 impl Host {
-    fn open(storage: &Path, token: String) -> Result<Self> {
-        let db = Connection::open_with_flags(
+    fn open(storage: &Path, castle: &CastleId, token: String) -> Result<Self> {
+        let mut db = Connection::open_with_flags(
             storage.join("host.sqlite"),
             OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW,
         )?;
         db.busy_timeout(TIMEOUT)?;
-        db.execute_batch("PRAGMA journal_mode=DELETE;
-            PRAGMA synchronous=FULL;
+        let has_scope: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='castle_scope')",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_scope {
+            let id: String =
+                db.query_row("SELECT id FROM castle_scope WHERE slot=1", [], |row| {
+                    row.get(0)
+                })?;
+            ensure!(
+                id == castle.as_str(),
+                "peer database belongs to a different Castle; restore the correct database"
+            );
+        } else if castle.as_str() != "demo" {
+            let existing: bool =
+                db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema)", [], |row| {
+                    row.get(0)
+                })?;
+            ensure!(
+                !existing,
+                "unscoped peer database belongs to demo; restore it to the original storage"
+            );
+        }
+        db.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;")?;
+        let tx = db.transaction()?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS castle_scope (slot INTEGER PRIMARY KEY, id TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS instance (slot INTEGER PRIMARY KEY, id TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS files (
                 path TEXT PRIMARY KEY, revision INTEGER NOT NULL, sha256 TEXT NOT NULL, bytes BLOB NOT NULL);
@@ -54,13 +81,19 @@ impl Host {
             CREATE TABLE IF NOT EXISTS receipt (
                 slot INTEGER PRIMARY KEY, operation TEXT NOT NULL, path TEXT NOT NULL,
                 expected INTEGER NOT NULL, sha256 TEXT NOT NULL);")?;
-        db.execute(
+        tx.execute(
+            "INSERT OR IGNORE INTO castle_scope VALUES (1, ?)",
+            [castle.as_str()],
+        )?;
+        tx.execute(
             "INSERT OR IGNORE INTO instance VALUES (1, ?)",
             [Uuid::new_v4().simple().to_string()],
         )?;
-        let id: String = db.query_row("SELECT id FROM instance WHERE slot=1", [], |r| r.get(0))?;
+        let id: String = tx.query_row("SELECT id FROM instance WHERE slot=1", [], |r| r.get(0))?;
         ensure!(lower_hex(&id, 32), "invalid host identity in storage");
+        tx.commit()?;
         Ok(Self {
+            route: castle.route(),
             db: Mutex::new(db),
             id,
             authorization: format!("Bearer {token}"),
@@ -329,13 +362,16 @@ impl Upload {
     }
 }
 
-async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
+async fn handle(State(hosts): State<Arc<Vec<Host>>>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let headers = &parts.headers;
     let auth = single(headers, "authorization").unwrap_or("").as_bytes();
-    if !bool::from(auth.ct_eq(host.authorization.as_bytes())) {
+    let Some(host) = hosts
+        .iter()
+        .find(|host| bool::from(auth.ct_eq(host.authorization.as_bytes())))
+    else {
         return error(401, "credentials rejected; check the protected token file");
-    }
+    };
     let put = parts.method == Method::PUT;
     let delete = parts.method == Method::DELETE;
     if parts.method != Method::GET && !put && !delete {
@@ -350,10 +386,13 @@ async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
         );
     }
     let route = parts.uri.path_and_query().map(|p| p.as_str()).unwrap_or("");
-    let path = if route == PREFIX && !put && !delete {
+    let path = if route == host.route && !put && !delete {
         None
     } else {
-        let Some(path) = route.strip_prefix(PREFIX).and_then(|s| s.strip_prefix('/')) else {
+        let Some(path) = route
+            .strip_prefix(&host.route)
+            .and_then(|s| s.strip_prefix('/'))
+        else {
             return error(404, "unknown Castle or route");
         };
         if validate_path(path).is_err() {
@@ -394,8 +433,12 @@ async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
     result.unwrap_or_else(|_| error(500, "host storage error"))
 }
 
-/// Serve one Castle on IPv4 loopback, retaining the Python-compatible storage lock until exit.
+/// Serve the original demo Castle, preserving legacy storage and protocol.
 pub fn serve(storage: &Path, port: u16, token: String) -> Result<()> {
+    serve_castles(storage, port, vec![(CastleId::default(), token)])
+}
+
+fn lock_storage(storage: &Path) -> Result<File> {
     crate::folder::private_dir(storage)?;
     let mut options = OpenOptions::new();
     options.read(true).append(true).create(true);
@@ -412,14 +455,43 @@ pub fn serve(storage: &Path, port: u16, token: String) -> Result<()> {
         "expected regular service lock file"
     );
     FileExt::try_lock_exclusive(&lock).context("host storage is already in use")?;
-    let host = Arc::new(Host::open(storage, token)?);
+    Ok(lock)
+}
+
+/// Serve explicitly configured Castles on one loopback endpoint with separate credentials.
+pub fn serve_castles(storage: &Path, port: u16, castles: Vec<(CastleId, String)>) -> Result<()> {
+    ensure!(!castles.is_empty(), "configure at least one Castle");
+    let mut ids = BTreeSet::new();
+    let mut tokens = BTreeSet::new();
+    for (id, token) in &castles {
+        ensure!(ids.insert(id), "duplicate Castle ID: {id}");
+        ensure!(
+            tokens.insert(token),
+            "each Castle requires a different token"
+        );
+    }
+    let names = castles
+        .iter()
+        .map(|(id, _)| id.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut locks = vec![lock_storage(storage)?];
+    let mut hosts = Vec::with_capacity(castles.len());
+    for (castle, token) in castles {
+        let path = castle.state_dir(storage);
+        if path != storage {
+            locks.push(lock_storage(&path)?);
+        }
+        hosts.push(Host::open(&path, &castle, token)?);
+    }
+    let host = Arc::new(hosts);
     let service = TowerToHyperService::new(Router::new().fallback(handle).with_state(host));
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
     rt.block_on(async move {
         let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await?;
-        println!("Serving Castle demo on {}", listener.local_addr()?);
+        println!("Serving Castle {names} on {}", listener.local_addr()?);
         std::io::stdout().flush()?;
         let mut http = http1::Builder::new();
         http.keep_alive(false)
@@ -432,4 +504,37 @@ pub fn serve(storage: &Path, port: u16, token: String) -> Result<()> {
             let _ = tokio::time::timeout(Duration::from_secs(15), connection).await;
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn misplaced_peer_storage_is_refused_before_serving_its_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let storage = temp.path().canonicalize().unwrap();
+        let demo = CastleId::default();
+        let research = "research".parse().unwrap();
+        drop(Host::open(&storage, &demo, Uuid::new_v4().to_string()).unwrap());
+        let open_research = || Host::open(&storage, &research, Uuid::new_v4().to_string());
+        assert!(
+            open_research()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("different Castle")
+        );
+        let db = Connection::open(storage.join("host.sqlite")).unwrap();
+        db.execute("DROP TABLE castle_scope", []).unwrap();
+        drop(db);
+        assert!(
+            open_research()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("belongs to demo")
+        );
+        Host::open(&storage, &demo, Uuid::new_v4().to_string()).unwrap();
+    }
 }

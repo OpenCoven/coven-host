@@ -1,12 +1,14 @@
 //! Harness for exercising the native library against the Python reference CLI tests.
 use anyhow::{Result, ensure};
 use clap::{Parser, Subcommand};
-use coven_host::{Client, folder, peer, peer_command};
+use coven_host::{CastleId, Client, folder, peer, peer_command_for};
 use std::io::Write;
 use std::path::PathBuf;
 
 #[derive(Parser)]
 struct Args {
+    #[arg(long, global = true, default_value = "demo")]
+    castle: CastleId,
     #[arg(long, default_value = ".")]
     state: PathBuf,
     #[command(subcommand)]
@@ -37,6 +39,8 @@ enum Command {
         merged: Option<PathBuf>,
     },
     Serve {
+        #[arg(long, value_name = "ID=TOKEN_FILE")]
+        castle_token: Vec<String>,
         #[arg(long)]
         storage: PathBuf,
         #[arg(long)]
@@ -69,7 +73,7 @@ enum Command {
 
 fn run() -> Result<()> {
     let args = Args::parse();
-    let client = Client::new(&args.state);
+    let client = Client::new(&args.state).for_castle(&args.castle);
     match args.command {
         Command::Init { root } => client.initialize(&root)?,
         Command::Connect { url, token_file } => client.connect(&url, &token_file)?,
@@ -129,12 +133,23 @@ fn run() -> Result<()> {
             storage,
             port,
             token_file,
-        } => peer::serve(&storage, port, folder::token_from(&token_file)?)?,
+            castle_token,
+        } => {
+            let mut castles = vec![(args.castle.clone(), folder::token_from(&token_file)?)];
+            for registration in castle_token {
+                let (id, file) = registration
+                    .split_once('=')
+                    .ok_or_else(|| anyhow::anyhow!("expected ID=TOKEN_FILE"))?;
+                castles.push((id.parse()?, folder::token_from(file.as_ref())?));
+            }
+            peer::serve_castles(&storage, port, castles)?;
+        }
         Command::Get {
             path,
             url,
             token_file,
-        } => std::io::stdout().write_all(&peer_command(
+        } => std::io::stdout().write_all(&peer_command_for(
+            &args.castle,
             "get",
             &url,
             &token_file,
@@ -146,20 +161,17 @@ fn run() -> Result<()> {
             source,
             url,
             token_file,
-        } => std::io::stdout().write_all(&peer_command(
+        } => std::io::stdout().write_all(&peer_command_for(
+            &args.castle,
             "put",
             &url,
             &token_file,
             Some(&path),
             Some(&source),
         )?)?,
-        Command::DemoResult { url, token_file } => std::io::stdout().write_all(&peer_command(
-            "demo-result",
-            &url,
-            &token_file,
-            None,
-            None,
-        )?)?,
+        Command::DemoResult { url, token_file } => std::io::stdout().write_all(
+            &peer_command_for(&args.castle, "demo-result", &url, &token_file, None, None)?,
+        )?,
     }
     Ok(())
 }
