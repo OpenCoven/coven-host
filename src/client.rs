@@ -185,7 +185,17 @@ impl Client {
         Ok(db)
     }
 
+    fn verify_castle(&self, db: &Connection) -> Result<()> {
+        let recorded = setting(db, "castle")?;
+        ensure!(
+            recorded.as_deref().unwrap_or("demo") == self.castle.as_str(),
+            "client database belongs to a different Castle; restore its original state directory"
+        );
+        Ok(())
+    }
+
     fn root(&self, db: &Connection) -> Result<PathBuf> {
+        self.verify_castle(db)?;
         let root = PathBuf::from(setting(db, "root")?.context("client has no configured root")?);
         separate(&root, &self.base_state)?;
         if let Some(owner) = self.owner()? {
@@ -202,6 +212,7 @@ impl Client {
         tx.execute_batch(include_str!("client/schema.sql"))?;
         let configured = setting(&tx, "root")?;
         if let Some(ref other) = configured {
+            self.verify_castle(&tx)?;
             ensure!(
                 identity_path(Path::new(&other))? == identity_path(root)?,
                 "client state is already bound to another root"
@@ -213,6 +224,7 @@ impl Client {
         }
         tx.execute_batch(include_str!("client/deletion_schema.sql"))?;
         folder.initialize()?;
+        set(&tx, "castle", self.castle.as_str())?;
         set(
             &tx,
             "root",

@@ -228,3 +228,36 @@ fn two_castles_share_root_ownership_but_preserve_independent_local_state() {
     assert_eq!(research().status().unwrap()["phase"], "needs attention");
     assert_eq!(profile().status().unwrap()["pendingPaths"], 1);
 }
+
+#[test]
+fn restored_database_cannot_be_reused_under_a_sibling_castle_id() {
+    let tmp = tempfile::tempdir().unwrap();
+    let base = tmp.path().canonicalize().unwrap();
+    let state = base.join("state");
+    let root = base.join("Coven");
+    let client = |name: &str| {
+        Client::for_profile(&state, &base.join("profile")).for_castle(&name.parse().unwrap())
+    };
+    for name in ["demo", "research"] {
+        client(name).initialize(&root).unwrap();
+    }
+    let named = state.join("castles/research/client.sqlite");
+    let demo = state.join("client.sqlite");
+    fs::copy(&named, &demo).unwrap();
+    assert!(
+        client("demo")
+            .status()
+            .unwrap_err()
+            .to_string()
+            .contains("different Castle")
+    );
+    assert!(client("demo").initialize(&root).is_err());
+    // An untagged historical demo database must also stay in demo.
+    rusqlite::Connection::open(&demo)
+        .unwrap()
+        .execute("DELETE FROM settings WHERE key='castle'", [])
+        .unwrap();
+    fs::copy(&demo, &named).unwrap();
+    assert!(client("research").initialize(&root).is_err());
+    client("demo").status().unwrap();
+}

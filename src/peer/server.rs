@@ -40,13 +40,38 @@ struct Host {
 
 impl Host {
     fn open(storage: &Path, castle: &CastleId, token: String) -> Result<Self> {
-        let db = Connection::open_with_flags(
+        let mut db = Connection::open_with_flags(
             storage.join("host.sqlite"),
             OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW,
         )?;
         db.busy_timeout(TIMEOUT)?;
-        db.execute_batch("PRAGMA journal_mode=DELETE;
-            PRAGMA synchronous=FULL;
+        let has_scope: bool = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE name='castle_scope')",
+            [],
+            |row| row.get(0),
+        )?;
+        if has_scope {
+            let id: String =
+                db.query_row("SELECT id FROM castle_scope WHERE slot=1", [], |row| {
+                    row.get(0)
+                })?;
+            ensure!(
+                id == castle.as_str(),
+                "peer database belongs to a different Castle; restore the correct database"
+            );
+        } else if castle.as_str() != "demo" {
+            let existing: bool =
+                db.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_schema)", [], |row| {
+                    row.get(0)
+                })?;
+            ensure!(
+                !existing,
+                "unscoped peer database belongs to demo; restore it to the original storage"
+            );
+        }
+        db.execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL;")?;
+        let tx = db.transaction()?;
+        tx.execute_batch("CREATE TABLE IF NOT EXISTS castle_scope (slot INTEGER PRIMARY KEY, id TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS instance (slot INTEGER PRIMARY KEY, id TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS files (
                 path TEXT PRIMARY KEY, revision INTEGER NOT NULL, sha256 TEXT NOT NULL, bytes BLOB NOT NULL);
@@ -56,12 +81,17 @@ impl Host {
             CREATE TABLE IF NOT EXISTS receipt (
                 slot INTEGER PRIMARY KEY, operation TEXT NOT NULL, path TEXT NOT NULL,
                 expected INTEGER NOT NULL, sha256 TEXT NOT NULL);")?;
-        db.execute(
+        tx.execute(
+            "INSERT OR IGNORE INTO castle_scope VALUES (1, ?)",
+            [castle.as_str()],
+        )?;
+        tx.execute(
             "INSERT OR IGNORE INTO instance VALUES (1, ?)",
             [Uuid::new_v4().simple().to_string()],
         )?;
-        let id: String = db.query_row("SELECT id FROM instance WHERE slot=1", [], |r| r.get(0))?;
+        let id: String = tx.query_row("SELECT id FROM instance WHERE slot=1", [], |r| r.get(0))?;
         ensure!(lower_hex(&id, 32), "invalid host identity in storage");
+        tx.commit()?;
         Ok(Self {
             route: castle.route(),
             db: Mutex::new(db),
@@ -474,4 +504,37 @@ pub fn serve_castles(storage: &Path, port: u16, castles: Vec<(CastleId, String)>
             let _ = tokio::time::timeout(Duration::from_secs(15), connection).await;
         }
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn misplaced_peer_storage_is_refused_before_serving_its_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let storage = temp.path().canonicalize().unwrap();
+        let demo = CastleId::default();
+        let research = "research".parse().unwrap();
+        drop(Host::open(&storage, &demo, Uuid::new_v4().to_string()).unwrap());
+        let open_research = || Host::open(&storage, &research, Uuid::new_v4().to_string());
+        assert!(
+            open_research()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("different Castle")
+        );
+        let db = Connection::open(storage.join("host.sqlite")).unwrap();
+        db.execute("DROP TABLE castle_scope", []).unwrap();
+        drop(db);
+        assert!(
+            open_research()
+                .err()
+                .unwrap()
+                .to_string()
+                .contains("belongs to demo")
+        );
+        Host::open(&storage, &demo, Uuid::new_v4().to_string()).unwrap();
+    }
 }
