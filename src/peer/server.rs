@@ -1,6 +1,7 @@
 //! Loopback peer service. The on-disk schema and retry receipt are shared with the Python host.
 use std::{
-    fs::OpenOptions,
+    collections::BTreeSet,
+    fs::{File, OpenOptions},
     io::Write,
     net::Ipv4Addr,
     path::Path,
@@ -27,17 +28,18 @@ use serde_json::{Value, json};
 use subtle::ConstantTimeEq;
 use uuid::Uuid;
 
-use super::{Inventory, Item, PREFIX, Row, TIMEOUT, lower_hex};
-use crate::{MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
+use super::{Inventory, Item, Row, TIMEOUT, lower_hex};
+use crate::{CastleId, MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
 
 struct Host {
+    route: String,
     db: Mutex<Connection>,
     id: String,
     authorization: String,
 }
 
 impl Host {
-    fn open(storage: &Path, token: String) -> Result<Self> {
+    fn open(storage: &Path, castle: &CastleId, token: String) -> Result<Self> {
         let db = Connection::open_with_flags(
             storage.join("host.sqlite"),
             OpenFlags::default() | OpenFlags::SQLITE_OPEN_NOFOLLOW,
@@ -61,6 +63,7 @@ impl Host {
         let id: String = db.query_row("SELECT id FROM instance WHERE slot=1", [], |r| r.get(0))?;
         ensure!(lower_hex(&id, 32), "invalid host identity in storage");
         Ok(Self {
+            route: castle.route(),
             db: Mutex::new(db),
             id,
             authorization: format!("Bearer {token}"),
@@ -329,13 +332,16 @@ impl Upload {
     }
 }
 
-async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
+async fn handle(State(hosts): State<Arc<Vec<Host>>>, request: Request) -> Response {
     let (parts, body) = request.into_parts();
     let headers = &parts.headers;
     let auth = single(headers, "authorization").unwrap_or("").as_bytes();
-    if !bool::from(auth.ct_eq(host.authorization.as_bytes())) {
+    let Some(host) = hosts
+        .iter()
+        .find(|host| bool::from(auth.ct_eq(host.authorization.as_bytes())))
+    else {
         return error(401, "credentials rejected; check the protected token file");
-    }
+    };
     let put = parts.method == Method::PUT;
     let delete = parts.method == Method::DELETE;
     if parts.method != Method::GET && !put && !delete {
@@ -350,10 +356,13 @@ async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
         );
     }
     let route = parts.uri.path_and_query().map(|p| p.as_str()).unwrap_or("");
-    let path = if route == PREFIX && !put && !delete {
+    let path = if route == host.route && !put && !delete {
         None
     } else {
-        let Some(path) = route.strip_prefix(PREFIX).and_then(|s| s.strip_prefix('/')) else {
+        let Some(path) = route
+            .strip_prefix(&host.route)
+            .and_then(|s| s.strip_prefix('/'))
+        else {
             return error(404, "unknown Castle or route");
         };
         if validate_path(path).is_err() {
@@ -394,8 +403,12 @@ async fn handle(State(host): State<Arc<Host>>, request: Request) -> Response {
     result.unwrap_or_else(|_| error(500, "host storage error"))
 }
 
-/// Serve one Castle on IPv4 loopback, retaining the Python-compatible storage lock until exit.
+/// Serve the original demo Castle, preserving legacy storage and protocol.
 pub fn serve(storage: &Path, port: u16, token: String) -> Result<()> {
+    serve_castles(storage, port, vec![(CastleId::default(), token)])
+}
+
+fn lock_storage(storage: &Path) -> Result<File> {
     crate::folder::private_dir(storage)?;
     let mut options = OpenOptions::new();
     options.read(true).append(true).create(true);
@@ -412,14 +425,43 @@ pub fn serve(storage: &Path, port: u16, token: String) -> Result<()> {
         "expected regular service lock file"
     );
     FileExt::try_lock_exclusive(&lock).context("host storage is already in use")?;
-    let host = Arc::new(Host::open(storage, token)?);
+    Ok(lock)
+}
+
+/// Serve explicitly configured Castles on one loopback endpoint with separate credentials.
+pub fn serve_castles(storage: &Path, port: u16, castles: Vec<(CastleId, String)>) -> Result<()> {
+    ensure!(!castles.is_empty(), "configure at least one Castle");
+    let mut ids = BTreeSet::new();
+    let mut tokens = BTreeSet::new();
+    for (id, token) in &castles {
+        ensure!(ids.insert(id), "duplicate Castle ID: {id}");
+        ensure!(
+            tokens.insert(token),
+            "each Castle requires a different token"
+        );
+    }
+    let names = castles
+        .iter()
+        .map(|(id, _)| id.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut locks = vec![lock_storage(storage)?];
+    let mut hosts = Vec::with_capacity(castles.len());
+    for (castle, token) in castles {
+        let path = castle.state_dir(storage);
+        if path != storage {
+            locks.push(lock_storage(&path)?);
+        }
+        hosts.push(Host::open(&path, &castle, token)?);
+    }
+    let host = Arc::new(hosts);
     let service = TowerToHyperService::new(Router::new().fallback(handle).with_state(host));
     let rt = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
     rt.block_on(async move {
         let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await?;
-        println!("Serving Castle demo on {}", listener.local_addr()?);
+        println!("Serving Castle {names} on {}", listener.local_addr()?);
         std::io::stdout().flush()?;
         let mut http = http1::Builder::new();
         http.keep_alive(false)

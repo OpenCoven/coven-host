@@ -11,11 +11,13 @@ use uuid::Uuid;
 
 use crate::folder::{Folder, Scan, private_dir, read_external, token_from};
 use crate::peer::{self, Item, Peer};
-use crate::{MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
+use crate::{CastleId, MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
 
 mod reconcile;
 
 pub struct Client {
+    castle: CastleId,
+    base_state: PathBuf,
     profile: Option<PathBuf>,
     state: PathBuf,
 }
@@ -106,6 +108,8 @@ fn separate(a: &Path, b: &Path) -> Result<()> {
 impl Client {
     pub fn new(state: &Path) -> Self {
         Self {
+            castle: CastleId::default(),
+            base_state: state.into(),
             profile: None,
             state: state.to_owned(),
         }
@@ -113,16 +117,26 @@ impl Client {
 
     pub fn for_profile(state: &Path, profile: &Path) -> Self {
         Self {
-            state: state.into(),
             profile: Some(profile.into()),
+            ..Self::new(state)
         }
+    }
+
+    pub fn for_castle(mut self, id: &CastleId) -> Self {
+        self.state = id.state_dir(&self.base_state);
+        self.castle = id.clone();
+        self
+    }
+
+    fn folder(&self, root: &Path) -> Folder {
+        Folder::for_castle(root, &self.state, &self.castle)
     }
 
     fn owner(&self) -> Result<Option<String>> {
         self.profile
             .as_ref()
             .map(|profile| {
-                let paths = (identity_path(profile)?, identity_path(&self.state)?);
+                let paths = (identity_path(profile)?, identity_path(&self.base_state)?);
                 Ok(digest(&serde_json::to_vec(&paths)?))
             })
             .transpose()
@@ -173,15 +187,15 @@ impl Client {
 
     fn root(&self, db: &Connection) -> Result<PathBuf> {
         let root = PathBuf::from(setting(db, "root")?.context("client has no configured root")?);
-        separate(&root, &self.state)?;
+        separate(&root, &self.base_state)?;
         if let Some(owner) = self.owner()? {
-            Folder::new(&root, &self.state).verify_owner(&owner)?;
+            self.folder(&root).verify_owner(&owner)?;
         }
         Ok(root)
     }
 
     pub fn initialize(&self, root: &Path) -> Result<()> {
-        separate(root, &self.state)?;
+        separate(root, &self.base_state)?;
         let _lock = self.lock()?;
         let mut db = self.db(true)?;
         let tx = db.transaction()?;
@@ -193,7 +207,7 @@ impl Client {
                 "client state is already bound to another root"
             );
         }
-        let folder = Folder::new(root, &self.state);
+        let folder = self.folder(root);
         if let Some(owner) = self.owner()? {
             folder.claim_owner(&owner, configured.is_some())?;
         }
@@ -233,7 +247,12 @@ impl Client {
         let url = setting(db, "url")?.context("no remote configured; run connect")?;
         let token = setting(db, "token_path")?.context("no protected token file configured")?;
         separate(&self.root(db)?, Path::new(&token))?;
-        Peer::new(&url, token_from(Path::new(&token))?, setting(db, "host")?)
+        Peer::for_castle(
+            &self.castle,
+            &url,
+            token_from(Path::new(&token))?,
+            setting(db, "host")?,
+        )
     }
 
     fn inventory(&self, db: &Connection, remote: &mut Peer) -> Result<BTreeMap<String, Item>> {
@@ -322,7 +341,7 @@ impl Client {
         FileExt::lock_exclusive(&lock)
             .context("could not acquire the client reconciliation lock")?;
         let db = self.db(false)?;
-        let folder = Folder::new(&self.root(&db)?, &self.state);
+        let folder = self.folder(&self.root(&db)?);
         phase(&db, "syncing", "")?;
         let (state, error) = match self.reconcile(&db, &folder) {
             Ok(errors) if errors.is_empty() => ("synced", String::new()),
@@ -338,7 +357,7 @@ impl Client {
         validate_path(path)?;
         let _lock = self.lock()?;
         let db = self.db(false)?;
-        let folder = Folder::new(&self.root(&db)?, &self.state);
+        let folder = self.folder(&self.root(&db)?);
         self.check_recovery(&folder)?;
         let conflicts = conflicts(&db)?;
         let conflict = conflicts.get(path).context("no recorded conflict")?;
@@ -467,7 +486,7 @@ impl Client {
         };
         let db = self.db(false)?;
         let root = self.root(&db)?;
-        let folder = Folder::new(&root, &self.state);
+        let folder = self.folder(&root);
         let mut state = setting(&db, "phase")?.unwrap_or_else(|| "needs attention".into());
         let mut error = setting(&db, "error")?.unwrap_or_else(|| "run connect and sync".into());
         let pending: Option<String> = db
@@ -554,6 +573,7 @@ impl Client {
             .replacement_status()
             .unwrap_or_else(|e| json!({"error":format!("{e:#}")}));
         Ok(json!({
+            "castle": self.castle.as_str(),
             "root": root,
             "remote": setting(&db, "url")?,
             "contact": setting(&db, "contact")?,

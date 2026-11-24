@@ -1,5 +1,5 @@
 //! Read and publish files through a pinned parent directory.
-use crate::{MAX_FILE, MAX_FILES, MAX_TOTAL, digest, excluded, validate_path};
+use crate::{CastleId, MAX_FILE, MAX_FILES, MAX_TOTAL, digest, excluded, validate_path};
 use anyhow::{Context, Result, ensure};
 use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::OsStr;
@@ -24,6 +24,7 @@ pub struct Scan {
 
 #[derive(Debug, Clone)]
 pub struct Folder {
+    id: CastleId,
     root: PathBuf,
     state: PathBuf,
 }
@@ -127,7 +128,12 @@ pub fn token_from(path: &Path) -> Result<String> {
 
 impl Folder {
     pub fn new(root: &Path, state: &Path) -> Self {
+        Self::for_castle(root, state, &CastleId::default())
+    }
+
+    pub(crate) fn for_castle(root: &Path, state: &Path, id: &CastleId) -> Self {
         Self {
+            id: id.clone(),
             root: root.into(),
             state: state.into(),
         }
@@ -136,7 +142,7 @@ impl Folder {
     fn castle(&self, create: bool) -> Result<Dir> {
         Dir::open(&self.root, create)?
             .child("Castles".as_ref(), create)?
-            .child("demo".as_ref(), create)
+            .child(self.id.as_str().as_ref(), create)
     }
 
     fn opened(&self) -> Result<Dir> {
@@ -144,8 +150,10 @@ impl Folder {
         let manifest: serde_json::Value =
             serde_json::from_slice(&read_at(&castle, "castle.json".as_ref(), 4096, false)?)?;
         ensure!(
-            manifest["version"].as_u64() == Some(1) && manifest["id"].as_str() == Some("demo"),
-            "wrong Castle manifest; restore the original demo folder"
+            manifest["version"].as_u64() == Some(1)
+                && manifest["id"].as_str() == Some(self.id.as_str()),
+            "wrong Castle manifest; restore the original {} folder",
+            self.id
         );
         Ok(castle)
     }
@@ -166,12 +174,15 @@ impl Folder {
         let lock = root.open_lock(".coven-profile.lock".as_ref())?;
         fs2::FileExt::lock_exclusive(&lock)?;
         if !configured
-            && self.castle(false).is_ok()
-            && root.open_file(".coven-profile".as_ref()).is_err()
+            && missing_or(root.open_file(".coven-profile".as_ref()))?.is_none()
+            && let Some(castles) = missing_or(root.child("Castles".as_ref(), false))?
         {
-            anyhow::bail!(
-                "existing Castle has no recorded owner; select its original configured profile and run coven host init"
-            );
+            castles.each_name(|entry| {
+                if entry.to_str().is_some_and(|name| name.parse::<CastleId>().is_ok()) && castles.is_dir(entry)? {
+                    anyhow::bail!("existing Castle has no recorded owner; select its original configured profile and run coven host init");
+                }
+                Ok(())
+            })?;
         }
         seed(&root, ".coven-profile", owner.as_bytes())?;
         self.verify_owner(owner)
@@ -179,16 +190,21 @@ impl Folder {
 
     pub fn initialize(&self) -> Result<()> {
         let castle = self.castle(true)?;
+        let display = if self.id.as_str() == "demo" {
+            "Demo Castle"
+        } else {
+            self.id.as_str()
+        };
+        let manifest = format!(
+            "{{\n  \"version\": 1,\n  \"id\": \"{}\",\n  \"displayName\": \"{display}\"\n}}\n",
+            self.id
+        );
+        seed(&castle, "castle.json", manifest.as_bytes())?;
+        self.opened()?;
         for area in ["files", "results"] {
             castle.child(area.as_ref(), true)?;
         }
-        seed(
-            &castle,
-            "castle.json",
-            b"{\n  \"version\": 1,\n  \"id\": \"demo\",\n  \"displayName\": \"Demo Castle\"\n}\n",
-        )?;
-        seed(&Dir::open(&self.root, false)?, "README.md", b"# Coven\n\nOnly Castles/demo/files and results sync. Missing files require resolution. Run coven host status for pending work and recovery paths.\n")?;
-        self.opened()?;
+        seed(&Dir::open(&self.root, false)?, "README.md", b"# Coven\n\nEach configured Castle synchronizes its files and results directories. Run coven host status for demo or coven host --castle NAME status for another Castle to inspect pending work and recovery paths.\n")?;
         Ok(())
     }
 
@@ -267,13 +283,21 @@ impl Folder {
         missing_or(read_at(&parent, name.as_ref(), MAX_FILE, false))
     }
 
+    fn recovery_root(&self) -> PathBuf {
+        if self.id.as_str() == "demo" {
+            self.root.clone()
+        } else {
+            self.root.join("Castles").join(self.id.as_str())
+        }
+    }
+
     fn scratch(&self, target: &Dir) -> Result<Dir> {
         let state = Dir::open(&self.state, true)?;
         native::check_private(&state.file)?;
         let scratch = if state.id()?.0 == target.id()?.0 {
             state.child("recovery".as_ref(), true)?
         } else {
-            Dir::open(&self.root, false)?.child(".coven-recovery".as_ref(), true)?
+            Dir::open(&self.recovery_root(), false)?.child(".coven-recovery".as_ref(), true)?
         };
         native::check_private(&scratch.file)?;
         ensure!(
@@ -351,7 +375,9 @@ impl Folder {
         // Status also reports the root availability error separately. State-side
         // versions remain available while a removable or unsafe root is offline.
         if Dir::open(&self.root, false).is_ok() {
-            files.extend(previous::list(&self.root.join(".coven-previous-versions"))?);
+            files.extend(previous::list(
+                &self.recovery_root().join(".coven-previous-versions"),
+            )?);
         }
         files.sort();
         Ok(files)
@@ -389,7 +415,7 @@ impl Folder {
         let mut found = Vec::new();
         for directory in [
             self.state.join("recovery"),
-            self.root.join(".coven-recovery"),
+            self.recovery_root().join(".coven-recovery"),
         ] {
             let Some(dir) = missing_or(Dir::open(&directory, false))? else {
                 continue;

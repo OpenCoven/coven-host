@@ -30,16 +30,20 @@ class AcknowledgementProbe(FaultProxy):
 
 
 class Client:
-    def __init__(self, executable, home, adapter):
-        self.state = home / "state"
+    def __init__(self, executable, home, adapter, castle="demo"):
+        base = home / "state"
+        self.castle = castle
+        self.state = base if castle == "demo" else base / "castles" / castle
         self.root = home / "Castle"
-        self.file = self.root / "Castles" / "demo" / KEY
-        self.env = dict(os.environ, COVEN_HOME=str(home / "profile"), COVEN_HOST_STATE=str(self.state))
+        self.file = self.root / "Castles" / castle / KEY
+        self.env = dict(os.environ, COVEN_HOME=str(home / "profile"), COVEN_HOST_STATE=str(base))
         self.executable = executable
         self.adapter = adapter
 
     def run(self, *args, success=True):
-        prefix = ["--state", self.state] if self.adapter else ["host"]
+        prefix = ["--state", self.env["COVEN_HOST_STATE"]] if self.adapter else ["host"]
+        if self.castle != "demo":
+            prefix.extend(["--castle", self.castle])
         p = subprocess.run([self.executable, *prefix, *args], env=self.env, capture_output=True, timeout=60)
         if (p.returncode == 0) != success:
             raise RuntimeError(f"{args[0]} exited {p.returncode}: {p.stderr.decode(errors='replace')[:300]}")

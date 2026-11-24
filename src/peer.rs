@@ -1,4 +1,4 @@
-//! Authenticated client for the single-Castle HTTP protocol.
+//! Authenticated client for the Castle-scoped HTTP protocol.
 use std::{collections::BTreeMap, fmt, io::Read, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -10,12 +10,11 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
+use crate::{CastleId, MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
 
 mod server;
-pub use server::serve;
+pub use server::{serve, serve_castles};
 
-const PREFIX: &str = "/v1/castles/demo/files";
 const TIMEOUT: Duration = Duration::from_secs(5);
 const INVENTORY_LIMIT: usize = 1024 * 1024;
 const REVISION_LIMIT: i64 = 1_000_000_000_000_000_000;
@@ -123,6 +122,15 @@ pub struct Peer {
 
 impl Peer {
     pub fn new(url: &str, token: String, identity: Option<String>) -> Result<Self> {
+        Self::for_castle(&CastleId::default(), url, token, identity)
+    }
+
+    pub fn for_castle(
+        castle: &CastleId,
+        url: &str,
+        token: String,
+        identity: Option<String>,
+    ) -> Result<Self> {
         endpoint(url)?;
         let mut authorization = HeaderValue::from_str(&format!("Bearer {token}"))
             .map_err(|_| anyhow::anyhow!("invalid token file format"))?;
@@ -137,7 +145,7 @@ impl Peer {
             .build()?;
         Ok(Self {
             client,
-            base: format!("{}{PREFIX}", url.trim_end_matches('/')),
+            base: format!("{}{}", url.trim_end_matches('/'), castle.route()),
             identity,
             deleted: None,
         })
