@@ -20,6 +20,8 @@ The installed Mac candidate followed the operator walkthrough through a strict S
 
 The Rust peer tests populated the demo index to its 1,000-file limit, observed HTTP 413 on its next insertion, and read back a new research file on the same listener. Each token was refused access to the other inventory and document. Both Castles replayed the same operation ID independently after restart. In both the Rust adapter and the installed production CLI/daemon journey, one Castle recovered an offline edit at revision 3 after a lost deletion acknowledgement while the other propagated a rename at revision 1. The suite repeated the journey with the roles reversed and checked the exact bytes, both revision 2 deletion archives, and the local recovery copies. The installed CLI also passed all four original demo two-client conflict orderings and decisions. [Reproducible commands](../AGENTS.md#source-and-verification-map)
 
+The local folder check filled research to its 1,000-file limit, added one result, and observed the quota diagnostic while demo still reported its pending file. Removing the result restored the research count. A separate fresh Mac installation passed all three contributor commands, including refusal of a different daemon profile and successful migration by the original owner. [Quota test on three platforms](https://github.com/OpenCoven/coven-host/pull/31) · [Installed CLI and daemon review](https://github.com/OpenCoven/coven/pull/1830#pullrequestreview-6032133866)
+
 ## Installed packages
 
 | Client and volume | Observed result | Installed executable SHA-256 |
