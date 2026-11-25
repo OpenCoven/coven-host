@@ -8,6 +8,16 @@ On 2026-11-18, the native CLI and production daemon passed packaged acceptance o
 | Windows test cleanup after qualification | [`113544b68fe74e068e87ad6b460d619ef15506c6`](https://github.com/OpenCoven/coven-host/commit/113544b68fe74e068e87ad6b460d619ef15506c6) changed only `tests/folder.rs`. |
 | Coven CLI, daemon and packaging | Local commit `40a5a18ed7abdaff6c6072695ecc0c186f4c0cd1` on `feat/1805-native-host`. [Coven #1805](https://github.com/OpenCoven/coven/issues/1805) |
 
+## Public npm CLI
+
+On 2026-11-25 UTC, a clean npm prefix on Apple silicon installed the public wrapper and native macOS package at 0.5.0 from the npm registry. Both package records identify Coven `d9b9d6a8b9f4775ad7fa0a2d95a9a78004c6d92c`. The installed CLI reported v0.5.0. Its help had no Host subcommand, and the noninteractive `coven host --help` invocation exited 1. The desktop installer has its own release and supplies demo sync. [Registry package](https://registry.npmjs.org/@opencoven%2fcli/0.5.0) · [Desktop installation](setup.md)
+
+| Verified bytes | SHA-256 |
+| --- | --- |
+| npm wrapper tarball, 0.5.0 | `1264b7150169d4a2c085dacd375b72448dcc59d3be94d4734b9934268b033d28` |
+| npm macOS arm64 tarball, 0.5.0 | `b568595e69a907f799b1d0c8bd34bc193ba456db012dfa1c3bf9a3aa9b421204` |
+| Installed macOS arm64 executable, 0.5.0 | `d8d0d800602cf708d85074c905a55632703aadf2a1f6edcc9ed8f72b063cf684` |
+
 ## Named Castle candidate
 
 The published v0.1.2 macOS installer initialized demo in a disposable profile and rejected `--castle research` with exit code 2. Host `d031b333498c06250fd9410f702401851caa330f` passed the hosted Rust checks on Windows/NTFS, macOS/APFS and Linux, the commit guard and secret scan, and the Linux compatibility matrix. A fresh macOS checkout passed `scripts/check.sh --fast`. The full Linux command passed all four steps on ARM64, including both stopped historical-state upgrade scenarios. [Host checks](https://github.com/OpenCoven/coven-host/actions/runs/45296840728) · [Installed baseline](https://github.com/OpenCoven/coven-host/issues/7#issuecomment-7117761703)

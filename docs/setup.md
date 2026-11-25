@@ -11,6 +11,10 @@ Download the installer for the computer where you want the folder. Open it in yo
 
 If you are unsure which download to choose, open the [download guide](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Start-Here.html). For offline installation, download the [offline kit](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Offline.zip), extract the entire ZIP, and open **Start-Here.html**. It selects a platform when your browser identifies one and lets you change the selection.
 
+## Which CLI supports the folder?
+
+For a working demo Castle, install the desktop package above. It includes the CLI, production daemon, local peer and login service. The public npm package `@opencoven/cli@0.5.0` predates Host commands. If you installed Coven through npm, run `coven --version` to identify the CLI on your path. Named Castle setup requires a build that lists `--castle` in `coven host --help`. [Registry verification](acceptance.md#public-npm-cli) · [Named Castle commands](operations.md#add-a-named-castle)
+
 ## Use the folder
 
 Save a document under `Coven/Castles/demo/files/`. Results from the peer appear under `Coven/Castles/demo/results/`. The local peer and watcher resume when you sign in. Both copies live on the same computer. To use a peer on a different computer, follow the [operator guide](operations.md).
