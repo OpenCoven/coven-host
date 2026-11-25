@@ -46,6 +46,13 @@ Save a document in `~/Coven/Castles/research/files/note.md`, sync research again
 coven host --castle research get files/note.md --url http://127.0.0.1:18765 --token-file "$STATE/access/research-token"
 ```
 
+To check which Castle needs attention after a restart, run both status commands in the profile that owns the folder. Read the `castle` field and the `path` in its conflict entry before opening a recovery copy. Two entries named `files/note.md` can belong to different Castles.
+
+```sh
+coven host status
+coven host --castle research status
+```
+
 If one client deletes the research note while another edits it offline, sync both and inspect `coven host --castle research status` on the client reporting the conflict. Confirm that `castle` is `research` and the entry in `conflicts` names `files/note.md`. Open the path in `local` or `remote` for the surviving edit and copy it to a private location if needed. If the local copy is the edit you want, run `coven host --castle research resolve files/note.md --local` and sync both research clients. For a remote rename, inspect the old file's entry in the selected Castle's `previousVersions`.
 
 Castle IDs have 1–63 lowercase ASCII letters, digits or hyphens, start with a letter, and end with a letter or digit. Windows reserved device names are excluded on every platform. The local manifest's `id` must match its folder name. Compatible optional fields survive reinitialization. A Project reference describes an association and grants no access. Keep the distinct bearer credentials in protected files.
