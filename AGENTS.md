@@ -4,6 +4,8 @@ Start with the [delivery plan](docs/plan.md) for current work and its next owner
 
 The product is Rust. The Linux compatibility tests extract the historical Python prototype at a fixed commit into a temporary directory. Keep product changes in Rust and use that fixture to verify interoperability and upgrades.
 
+For uploaded documents, read the [storage and processing decision](docs/uploaded-documents.md) before changing the peer or proposing a daemon processor. The [operator guide](docs/operations.md) describes the released behavior.
+
 ## Enable the commit guard
 
 Install Gitleaks 8.30.1 or a compatible v8 release and run the following once per clone. Git shares this configuration with linked worktrees. If the clone already uses a custom hooks directory, call this repository’s `.githooks/pre-commit` from the existing pre-commit hook to preserve its other hooks.
