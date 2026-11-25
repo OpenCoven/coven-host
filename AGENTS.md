@@ -52,6 +52,8 @@ python3 tests/test_multi_client.py /absolute/path/to/installed/coven
 
 For public CLI qualification, install the registry version under test in a fresh npm prefix. Record both wrapper and native package digests, the installed executable digest, and `coven --version`. Use that prefix’s executable for the two recovery commands above. Check the production daemon with a disposable profile. [Installation channels](docs/setup.md#which-cli-supports-the-folder) · [Operator walkthrough](docs/operations.md#add-a-named-castle) · [Registry evidence](docs/acceptance.md#public-npm-cli)
 
+For physical SSH qualification, use the [operator walkthrough](docs/operations.md#verify-recovery-across-an-ssh-disconnect), compare the [observed revisions and recovery hashes](docs/acceptance.md#ssh-walkthrough), and record which hardware or authorized access is missing with the [issue owner in the delivery plan](docs/plan.md#what-can-i-pick-up-next).
+
 ## Publishing a handoff
 
 Link the tracking issue and identify any consumer pin separately from the PR head. Record whether evidence came from source tests, a packaged binary, a real daemon or a remote peer. For Markdown, keep each ordinary paragraph on one source line and inspect the final rendered body. Use separate list items, table rows and code fences where they carry meaning.
