@@ -1,0 +1,11 @@
+{
+  "name": "coven-host-docs",
+  "private": true,
+  "scripts": {
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "github-slugger": "2.0.0",
+    "marked": "15.0.12"
+  }
+}
