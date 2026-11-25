@@ -31,11 +31,10 @@ The candidate lets an owner keep demo and synchronize a second Castle with its o
 
 ## What can I pick up next?
 
-Operators with two authorized physical machines can claim the SSH recovery walkthrough in #12. Record the machines and package digests on the issue before starting. Nova’s [uploaded-document design](uploaded-documents.md) explains why the peer stores uploads and how a writer requests the fixed demo result. BunsDev owns the daemon decision on #8. [Physical SSH acceptance](https://github.com/OpenCoven/coven-host/issues/12) · [Design review](https://github.com/OpenCoven/coven-host/pull/33)
+Operators with two authorized physical machines can claim the SSH recovery walkthrough in #12. Record the machines and package digests on the issue before starting. BunsDev approved [storage-only uploads](uploaded-documents.md). The document records the conditions for reconsidering local processing. [Physical SSH acceptance](https://github.com/OpenCoven/coven-host/issues/12) · [Design decision](https://github.com/OpenCoven/coven-host/pull/33)
 
 | Issue and outcome | Owner or resource | Next action | Evidence required to close |
 | --- | --- | --- | --- |
-| [#8 · Uploaded document execution design](https://github.com/OpenCoven/coven-host/issues/8) | Nova for the design, BunsDev for the Coven daemon decision | Review the proposed storage-only behavior and record the decision on [#33](https://github.com/OpenCoven/coven-host/pull/33). | Reviewed design covering sandboxing and disablement, linked consumer decision and separate implementation issues. |
 | [#9 · Intel Mac qualification](https://github.com/OpenCoven/coven-host/issues/9) | Volunteer with a physical Intel Mac | Download the release, verify its checksum and run fresh setup using a disposable account. | macOS version, executable digest, automatic transfer, repeat setup, login sync and copyable diagnostics on that Mac. |
 | [#10 · Native Windows qualification](https://github.com/OpenCoven/coven-host/issues/10) | BunsDev and a physical x64 Windows 11 machine with NTFS | Install the verified EXE as a standard user and run the applicable packaged and desktop scenarios. | Build, volume, digest, folder and library test results, recovery of held-open files, and any inapplicable scenarios. |
 | [#11 · Windows publisher signature](https://github.com/OpenCoven/coven-host/issues/11) | BunsDev and a protected Authenticode identity | Sign a test installer through the protected identity. | Valid Authenticode verification, documented signature check and passing offline-kit tests. |
