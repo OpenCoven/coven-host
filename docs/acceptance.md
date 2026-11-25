@@ -105,6 +105,16 @@ The macOS client opened a strict host-key-checked SSH forward to a Linux guest. 
 
 The walkthrough passed against x86-64 and ARM Linux guests. The client and guests shared one physical Mac. To repeat it, follow the [SSH setup](operations.md#connect-through-ssh), record the peer identity and file hash before disconnection, then compare the identity, revision and file bytes on reconnect and after resolution.
 
+On November 25, the released v0.1.2 macOS arm64 executable repeated the conflict steps against a local loopback peer. The client daemon stopped, the peer reopened its original storage, and its identity remained `2722481124ba4a329d9d888a538b9f19`. Both recovery copies matched the independently written edits. Keeping the local edit returned the same bytes from the folder and peer, and another sync preserved revision 3. The Mac ZIP and Linux ARM64 archive both matched the [release checksums](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/SHA256SUMS).
+
+| Bytes from the [operator walkthrough](operations.md#verify-recovery-across-an-ssh-disconnect) | Peer revision | SHA-256 |
+| --- | --- | --- |
+| Baseline before and after restarting the peer | 1 | `4b654bd1437066b13498661f3ca14774daf1066d072036beffaf06f0c014250e` |
+| Peer edit and remote conflict copy | 2 | `16c09549ae85af4d00a7547a1c226134dd741e6c8bf22dddee30ec46208ea1f9` |
+| Offline edit, local conflict copy and resolved file | 3 after resolution | `8b5dc34112402f6909d95ce6877008c8ffadff760fede660b7625a7b140471a1` |
+
+The supplied SSH destination mapped to a local Parallels Windows 11 guest on the same Apple silicon Mac. The connection timed out before authentication. Physical SSH qualification is open. An operator with a separate authorized Linux machine can record the two physical platforms and package digests on [#12](https://github.com/OpenCoven/coven-host/issues/12#issuecomment-7159299525) and run the walkthrough.
+
 ## Remaining operator qualification
 
 | Issue | Prerequisite | Evidence to record |
