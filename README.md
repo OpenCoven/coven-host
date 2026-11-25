@@ -17,6 +17,8 @@ Two independently configured clients can sync one owner’s demo Castle with the
 
 A Castle provides a bounded place for a Project’s work and its results, with one execution owner. Coven Host synchronizes its `files/` and `results/` directories in both directions. The folder and local manifest identify the Castle. Execution of uploaded documents has its own design issue. [Castle terminology review](https://github.com/OpenCoven/coven-host/pull/15) · [Execution design](https://github.com/OpenCoven/coven-host/issues/8)
 
+**What a Castle is.** A Castle is a bounded, hosted place where a Project's work runs and its results come back, with exactly one execution owner. Coven Host provides a Castle's folder surface: `Castles/<name>/files/` in, `Castles/<name>/results/` out. [coven-castles](https://github.com/OpenCoven/coven-castles) checks whether a sandbox is fit to back a Castle, and Coven Compass shows Castles inside Projects. A Castle is not a Project, so its folder path and `castle.json` aren't a Project identity. Coven Host, coven-castles and Coven Compass share this definition.
+
 ## Preview the Host landing page
 
 Open [the landing page](docs/index.html) from a local checkout, or run `python3 -m http.server --directory docs 8000` and visit [localhost](http://localhost:8000/).
