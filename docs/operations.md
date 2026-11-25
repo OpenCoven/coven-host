@@ -114,6 +114,88 @@ If both sides edited the same file, inspect both paths reported by `status`. Cho
 
 The native client keeps the displaced file itself after an update. An editor that still has that file open can finish saving to it. Offline status lists these files under `previousVersions`, with the Castle path in each location. Each private archive reserves up to 100 MiB or 1000 previous versions. If it fills, finish saving and close editors, then move older versions you want to keep to a private backup before syncing again.
 
+## Verify recovery across an SSH disconnect
+
+Use a Mac client and an authorized Linux peer on a different physical computer. Verify both desktop v0.1.2 packages against the [release checksums](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/SHA256SUMS). The exercise uses the installed binaries, private temporary directories and two unused loopback ports. Leave your normal desktop services running. Verify the SSH host key through a trusted channel before starting.
+
+1. **Prepare the client.** In one Mac shell, substitute the verified SSH destination. Keep this shell open. The last command prints the temporary Linux directory for step 2. The SSH connection copies the disposable token without printing it.
+
+```sh
+REMOTE=your-user@your-verified-host
+CLI="$HOME/Library/Application Support/Coven Host/releases/v0.1.2/bin/coven"
+RUN=$(mktemp -d /tmp/coven-host-12.XXXXXX)
+export COVEN_HOME="$RUN/profile" COVEN_HOST_STATE="$RUN/client"
+TOKEN="$RUN/token"
+NOTE="$RUN/root/Castles/demo/files/note.md"
+URL=http://127.0.0.1:28765
+(umask 077; openssl rand -hex 32 > "$TOKEN")
+ssh -o StrictHostKeyChecking=yes "$REMOTE" \
+  'umask 077; dir=$(mktemp -d /tmp/coven-host-12.XXXXXX) && cat > "$dir/token" && echo "$dir"' < "$TOKEN"
+```
+
+2. **Start the peer.** In a Linux shell set `RUN` to the directory printed above. For the portable package, use the absolute path to its `coven` executable in place of the Debian path. Define these variables and start the peer in that shell. Keep the shell for the restart.
+
+```sh
+RUN=/tmp/coven-host-12.REPLACE
+CLI=/usr/lib/coven-host-desktop/coven
+URL=http://127.0.0.1:28764
+TOKEN="$RUN/token"
+"$CLI" host serve --storage "$RUN/server" --port 28764 --token-file "$TOKEN"
+```
+
+3. **Establish the baseline.** In the original Mac shell open a dedicated SSH forward. Initialize the disposable folder, publish one note and record the peer identity, revision 1 and file digest using the inventory command below. If a chosen port is occupied, pick a free port and update the matching URL and forward.
+
+```sh
+forward() {
+  ssh -fNT -M -S "$RUN/ssh" -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes \
+    -L 127.0.0.1:28765:127.0.0.1:28764 "$REMOTE"
+}
+forward
+"$CLI" host init --root "$RUN/root"
+"$CLI" host connect "$URL" --token-file "$TOKEN"
+printf 'baseline\n' > "$NOTE"
+"$CLI" host sync
+shasum -a 256 "$NOTE"
+```
+
+Run this inventory command in the shell on either endpoint with its own `URL` and `TOKEN`. It requires curl and jq.
+
+```sh
+awk '{print "Authorization: Bearer " $0}' "$TOKEN" |
+  curl --silent --show-error --fail --header @- "$URL/v1/castles/demo/files" |
+  jq -e 'select(.host and (.files | any(.path == "files/note.md"))) | {host, note: [.files[] | select(.path == "files/note.md") | {revision, sha256}]}'
+```
+
+4. **Disconnect and edit offline.** In the Mac shell run the following. On Linux interrupt only the foreground peer with Ctrl-C, then repeat its original `host serve` command. In a second Linux shell set the same `RUN`, `CLI`, `URL` and `TOKEN` as in step 2. Run inventory there. The restarted peer must still have its original identity, baseline digest and revision 1.
+
+```sh
+ssh -S "$RUN/ssh" -O exit "$REMOTE"
+"$CLI" daemon stop
+printf 'offline client edit\n' > "$NOTE"
+shasum -a 256 "$NOTE"
+```
+
+5. **Create the competing edit on Linux.** Run these commands in the second Linux shell while the forward is down. Use inventory again and record the peer edit at revision 2.
+
+```sh
+printf 'peer edit\n' > "$RUN/input"
+"$CLI" host put files/note.md "$RUN/input" --url "$URL" --token-file "$TOKEN"
+sha256sum "$RUN/input"
+```
+
+6. **Recover both edits.** In the Mac shell run `forward`, then `"$CLI" host sync`. Expect a conflict. Run `"$CLI" host status` and hash the files at the `local` and `remote` paths for `files/note.md` with `shasum -a 256`. Match them to the client and peer edit hashes respectively before resolving. Run the commands below and repeat inventory. The folder and fetched peer bytes must match the offline edit, the conflict must clear, and a second sync must preserve the identity and revision 3.
+
+```sh
+"$CLI" host resolve files/note.md --local
+"$CLI" host sync
+"$CLI" host get files/note.md --url "$URL" --token-file "$TOKEN" > "$RUN/fetched"
+shasum -a 256 "$NOTE" "$RUN/fetched"
+"$CLI" host sync
+"$CLI" host status
+```
+
+Record the platforms and filesystems, general network path, package digests, peer identity, revisions, hashes of both recovery copies and final bytes. Keep tokens and private paths out of the report. In the original Mac shell stop the disposable daemon with `"$CLI" daemon stop` and close the forward with `ssh -S "$RUN/ssh" -O exit "$REMOTE"`. Stop the foreground Linux peer. After saving the evidence, remove the two temporary directories created for this run. [Observed results and platform limits](acceptance.md#ssh-walkthrough)
+
 ## Upgrade an existing Linux installation
 
 Stop the Python client and peer before switching an existing installation. Use the existing host storage for `serve`. The default Linux daemon discovers the Python client database at `~/.local/state/coven-host/client`. For a custom Python state directory, set `COVEN_HOST_STATE` to its absolute path in the environment that starts the daemon. The existing root, identity pin, outbox and conflict copies are read in place. `put`, `get` and `demo-result` accept `--url` and `--token-file` and communicate directly with the peer.
