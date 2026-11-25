@@ -18,6 +18,10 @@ On 2026-11-25 UTC, a clean npm prefix on Apple silicon installed the public wrap
 | npm macOS arm64 tarball, 0.5.0 | `b568595e69a907f799b1d0c8bd34bc193ba456db012dfa1c3bf9a3aa9b421204` |
 | Installed macOS arm64 executable, 0.5.0 | `d8d0d800602cf708d85074c905a55632703aadf2a1f6edcc9ed8f72b063cf684` |
 
+### Locally packaged v0.5.1 candidate
+
+On the same Mac, the v0.5.1 wrapper and native tarball built from Coven `9415c3098f9635963db593970b8943370e90bf81` passed the npm prepublication smoke. A fresh installation of those tarballs passed profile recovery, both named Castle recovery journeys, and all four demo conflict choices through the production daemon. The installed executable contained the source revision and had SHA-256 `77cce608c79d5f70210fb0ec40c9d42cfededda64ed1d37b146a65c4a146abd5`. The registry installation above and this local installation used separate prefixes. [Candidate tarball digests and results](https://github.com/OpenCoven/coven/issues/1805#issuecomment-7151786697)
+
 ## Named Castle candidate
 
 The published v0.1.2 macOS installer initialized demo in a disposable profile and rejected `--castle research` with exit code 2. Host `d031b333498c06250fd9410f702401851caa330f` passed the hosted Rust checks on Windows/NTFS, macOS/APFS and Linux, the commit guard and secret scan, and the Linux compatibility matrix. A fresh macOS checkout passed `scripts/check.sh --fast`. The full Linux command passed all four steps on ARM64, including both stopped historical-state upgrade scenarios. [Host checks](https://github.com/OpenCoven/coven-host/actions/runs/45296840728) · [Installed baseline](https://github.com/OpenCoven/coven-host/issues/7#issuecomment-7117761703)
