@@ -1,6 +1,6 @@
 # What happens to an uploaded document?
 
-**Decision proposed for review in [Host #8](https://github.com/OpenCoven/coven-host/issues/8): keep uploaded documents storage-only.** This preserves the behavior of the v0.1.2 Host downloads. A successful sync makes bytes available to the Castle’s clients. Anyone holding its write credential can supply those bytes, including text that looks like instructions. Sync permission grants no authority to run a command, invoke a familiar, or spend an owner’s provider credits.
+**Decision approved by BunsDev in [Host #8](https://github.com/OpenCoven/coven-host/issues/8): keep uploaded documents storage-only.** This preserves the behavior of the v0.1.2 Host downloads. A successful sync makes bytes available to the Castle’s clients. Anyone holding its write credential can supply those bytes, including text that looks like instructions. Sync permission grants no authority to run a command, invoke a familiar, or spend an owner’s provider credits.
 
 **Who can authorize processing?** The shipped Host has no document-processing operation. The owner can open a copy in a separately chosen application. A peer token, a filename under `results/`, and a synced manifest do not express owner approval. An owner or other authorized writer can explicitly call `coven host demo-result`; this writes one fixed example document.
 

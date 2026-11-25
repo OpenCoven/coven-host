@@ -4,6 +4,8 @@ Start with the [delivery plan](docs/plan.md) for current work and its next owner
 
 The product is Rust. The Linux compatibility tests extract the historical Python prototype at a fixed commit into a temporary directory. Keep product changes in Rust and use that fixture to verify interoperability and upgrades.
 
+For uploaded documents, read the [storage and processing decision](docs/uploaded-documents.md) before changing the peer or proposing a daemon processor. The [operator guide](docs/operations.md) describes the released behavior.
+
 ## Enable the commit guard
 
 Install Gitleaks 8.30.1 or a compatible v8 release and run the following once per clone. Git shares this configuration with linked worktrees. If the clone already uses a custom hooks directory, call this repository’s `.githooks/pre-commit` from the existing pre-commit hook to preserve its other hooks.
@@ -47,6 +49,10 @@ cargo test --locked --test path_policy --test peer --test client --test folder
 python3 tests/test_named_castles.py /absolute/path/to/installed/coven
 python3 tests/test_multi_client.py /absolute/path/to/installed/coven
 ```
+
+For public CLI qualification, install the registry version under test in a fresh npm prefix. Record both wrapper and native package digests, the installed executable digest, and `coven --version`. Use that prefix’s executable for the two recovery commands above. Check the production daemon with a disposable profile. [Installation channels](docs/setup.md#which-cli-supports-the-folder) · [Operator walkthrough](docs/operations.md#add-a-named-castle) · [Registry evidence](docs/acceptance.md#public-npm-cli)
+
+For physical SSH qualification, use the [operator walkthrough](docs/operations.md#verify-recovery-across-an-ssh-disconnect), compare the [observed revisions and recovery hashes](docs/acceptance.md#ssh-walkthrough), and record which hardware or authorized access is missing with the [issue owner in the delivery plan](docs/plan.md#what-can-i-pick-up-next).
 
 ## Publishing a handoff
 

@@ -8,6 +8,20 @@ On 2026-11-18, the native CLI and production daemon passed packaged acceptance o
 | Windows test cleanup after qualification | [`113544b68fe74e068e87ad6b460d619ef15506c6`](https://github.com/OpenCoven/coven-host/commit/113544b68fe74e068e87ad6b460d619ef15506c6) changed only `tests/folder.rs`. |
 | Coven CLI, daemon and packaging | Local commit `40a5a18ed7abdaff6c6072695ecc0c186f4c0cd1` on `feat/1805-native-host`. [Coven #1805](https://github.com/OpenCoven/coven/issues/1805) |
 
+## Public npm CLI
+
+On 2026-11-25 UTC, a clean npm prefix on Apple silicon installed the public wrapper and native macOS package at 0.5.0 from the npm registry. Both package records identify Coven `d9b9d6a8b9f4775ad7fa0a2d95a9a78004c6d92c`. The installed CLI reported v0.5.0. Its help had no Host subcommand, and the noninteractive `coven host --help` invocation exited 1. The desktop installer has its own release and supplies demo sync. [Registry package](https://registry.npmjs.org/@opencoven%2fcli/0.5.0) · [Desktop installation](setup.md)
+
+| Verified bytes | SHA-256 |
+| --- | --- |
+| npm wrapper tarball, 0.5.0 | `1264b7150169d4a2c085dacd375b72448dcc59d3be94d4734b9934268b033d28` |
+| npm macOS arm64 tarball, 0.5.0 | `b568595e69a907f799b1d0c8bd34bc193ba456db012dfa1c3bf9a3aa9b421204` |
+| Installed macOS arm64 executable, 0.5.0 | `d8d0d800602cf708d85074c905a55632703aadf2a1f6edcc9ed8f72b063cf684` |
+
+### Locally packaged v0.5.1 candidate
+
+On the same Mac, the v0.5.1 wrapper and native tarball built from Coven `9415c3098f9635963db593970b8943370e90bf81` passed the npm prepublication smoke. A fresh installation of those tarballs passed profile recovery, both named Castle recovery journeys, and all four demo conflict choices through the production daemon. The installed executable contained the source revision and had SHA-256 `77cce608c79d5f70210fb0ec40c9d42cfededda64ed1d37b146a65c4a146abd5`. The registry installation above and this local installation used separate prefixes. [Candidate tarball digests and results](https://github.com/OpenCoven/coven/issues/1805#issuecomment-7151786697)
+
 ## Named Castle candidate
 
 The published v0.1.2 macOS installer initialized demo in a disposable profile and rejected `--castle research` with exit code 2. Host `d031b333498c06250fd9410f702401851caa330f` passed the hosted Rust checks on Windows/NTFS, macOS/APFS and Linux, the commit guard and secret scan, and the Linux compatibility matrix. A fresh macOS checkout passed `scripts/check.sh --fast`. The full Linux command passed all four steps on ARM64, including both stopped historical-state upgrade scenarios. [Host checks](https://github.com/OpenCoven/coven-host/actions/runs/45296840728) · [Installed baseline](https://github.com/OpenCoven/coven-host/issues/7#issuecomment-7117761703)
@@ -90,6 +104,16 @@ The [contributor guide](../AGENTS.md#source-and-verification-map) gives the inst
 The macOS client opened a strict host-key-checked SSH forward to a Linux guest. With the tunnel down, a local edit survived a daemon restart. The peer restarted on its original database and retained its identity and revision 1. After reconnect, the offline edit became revision 2. Conflicting edits produced two recoverable versions. Explicit local resolution left both endpoints at revision 4 with SHA-256 `6089e19ae7647e2b425a5648590d62b37dc92d8b8cb957bb0e68dde52e552903`.
 
 The walkthrough passed against x86-64 and ARM Linux guests. The client and guests shared one physical Mac. To repeat it, follow the [SSH setup](operations.md#connect-through-ssh), record the peer identity and file hash before disconnection, then compare the identity, revision and file bytes on reconnect and after resolution.
+
+On November 25, the released v0.1.2 macOS arm64 executable repeated the conflict steps against a local loopback peer. The client daemon stopped, the peer reopened its original storage, and its identity remained `2722481124ba4a329d9d888a538b9f19`. Both recovery copies matched the independently written edits. Keeping the local edit returned the same bytes from the folder and peer, and another sync preserved revision 3. The Mac ZIP and Linux ARM64 archive both matched the [release checksums](https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/SHA256SUMS).
+
+| Bytes from the [operator walkthrough](operations.md#verify-recovery-across-an-ssh-disconnect) | Peer revision | SHA-256 |
+| --- | --- | --- |
+| Baseline before and after restarting the peer | 1 | `4b654bd1437066b13498661f3ca14774daf1066d072036beffaf06f0c014250e` |
+| Peer edit and remote conflict copy | 2 | `16c09549ae85af4d00a7547a1c226134dd741e6c8bf22dddee30ec46208ea1f9` |
+| Offline edit, local conflict copy and resolved file | 3 after resolution | `8b5dc34112402f6909d95ce6877008c8ffadff760fede660b7625a7b140471a1` |
+
+The supplied SSH destination mapped to a local Parallels Windows 11 guest on the same Apple silicon Mac. The connection timed out before authentication. Physical SSH qualification is open. An operator with a separate authorized Linux machine can record the two physical platforms and package digests on [#12](https://github.com/OpenCoven/coven-host/issues/12#issuecomment-7159299525) and run the walkthrough.
 
 ## Remaining operator qualification
 
