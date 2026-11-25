@@ -1,5 +1,7 @@
 # Operate a native Coven Host
 
+Uploaded documents synchronize as bytes. Host runs no processor when a file arrives or a peer restarts. An explicit `coven host demo-result` writes fixed Markdown. See [what happens to an uploaded document](uploaded-documents.md) for the offline walkthrough and owner controls.
+
 Use a Coven CLI and daemon built with the `hostSync` capability. The [acceptance report](acceptance.md) identifies the tested build. The following commands use a Unix client and a Linux peer. On Windows, use the same CLI commands with local absolute paths and an owner-only ACL on the token. Keep private client state and the synchronized folder in separate directories on the same volume.
 
 ## Connect two clients

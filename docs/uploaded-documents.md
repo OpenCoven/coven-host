@@ -1,0 +1,37 @@
+# What happens to an uploaded document?
+
+**Decision proposed for review in [Host #8](https://github.com/OpenCoven/coven-host/issues/8): keep uploaded documents storage-only.** This preserves the behavior of the v0.1.2 Host downloads. A successful sync makes bytes available to the Castle’s clients. Anyone holding its write credential can supply those bytes, including text that looks like instructions. Sync permission grants no authority to run a command, invoke a familiar, or spend an owner’s provider credits.
+
+**Who can authorize processing?** The shipped Host has no document-processing operation. The owner can open a copy in a separately chosen application. A peer token, a filename under `results/`, and a synced manifest do not express owner approval. An owner or other authorized writer can explicitly call `coven host demo-result`; this writes one fixed example document.
+
+**How do I stop processing?** There is no processor to disable or pending job to cancel. If you want to stop transfers, stop the sync service or peer using the [operator guide](operations.md). Stopping transfers preserves already synchronized copies. Other programs that watch the folder have their own controls.
+
+## One upload while the owner is offline
+
+1. A second client publishes `files/note.md` to the demo peer. The peer authenticates the bearer credential, validates the route and upload headers, and commits the bytes at the expected revision. It checks the digest and records retry information for a sync operation. The upload response describes the stored item. [Release request handler](https://github.com/OpenCoven/coven-host/blob/c39e4474be545ae64fdb6bc88bcfa7e3443286be/src/peer/server.rs#L332) · [Write transaction](https://github.com/OpenCoven/coven-host/blob/c39e4474be545ae64fdb6bc88bcfa7e3443286be/src/peer/server.rs#L185)
+2. The peer restarts with its original storage. When the owner reconnects, Coven’s daemon runs the Host reconciliation code. The client checks peer history, verifies the downloaded bytes, and installs the document or preserves a competing edit for resolution. Restart and repeat sync have no document-processing side effect. [Daemon sync dispatch](https://github.com/OpenCoven/coven/blob/9e14f365e07e57892920d9fed31bbbf9b257b66c/crates/coven-cli/src/host_sync.rs#L339) · [Reconciliation](https://github.com/OpenCoven/coven-host/blob/c39e4474be545ae64fdb6bc88bcfa7e3443286be/src/client/reconcile.rs#L107)
+3. The owner sees the note. If a writer subsequently calls `coven host demo-result`, the CLI contacts the peer directly and compares fixed Markdown bytes with `results/hello-from-host.md`. It writes them conditionally or reports that they are current. It never reads the note to compose this result. Treat results from other writers as untrusted documents too. [CLI command routing](https://github.com/OpenCoven/coven/blob/9e14f365e07e57892920d9fed31bbbf9b257b66c/crates/coven-cli/src/host_cli.rs#L148) · [Demo path and contents](https://github.com/OpenCoven/coven-host/blob/c39e4474be545ae64fdb6bc88bcfa7e3443286be/src/lib.rs#L68)
+
+## Alternative considered
+
+An owner might want a plain-text preview, such as a word count, without opening a document. That can be useful offline. Running even a fixed parser adds a reader of untrusted bytes, a new writer in the Castle and durable authority that must survive races and restarts. The existing sync path supplies none of the following processing controls. We recommend retaining storage-only behavior until an operator identifies a result valuable enough to justify implementing and maintaining them.
+
+The narrow alternative would accept only a regular UTF-8 text file under the selected Castle’s `files/`, at most 64 KiB, with a registered plain-text processor. The owner would explicitly select that processor and confirm the Castle, pinned peer identity, path, revision and SHA-256 through a local, owner-authenticated daemon interface. Record that binding and the processor version in private daemon state. The peer, another client and document contents cannot create or transfer that grant. No uploaded content is executable.
+
+The daemon would give a disposable worker only the approved bytes. The worker would have a read-only input stream, bounded output, no network, credentials, shell, child processes or filesystem access, and enforced CPU, memory and wall-clock limits. A platform without those controls must refuse the request. Only the daemon could publish a successful bounded result, at a new path under the same Castle’s `results/`, linked to the input revision and digest. It must preserve the original, reject occupied output paths and exclude results as future inputs.
+
+The owner would have local controls to cancel one request or disable the processor for that Castle. Disablement must persist across restart, revoke outstanding grants and terminate active workers. The daemon must serialize cancellation, revision checks and result publication. Cancellation that wins before publication leaves no result. If publication already committed, show the result path and revision so the owner can remove it through ordinary sync. A restart must leave interrupted work stopped and reconcile any uncertain publication by its operation ID before accepting a new approval.
+
+## Acceptance and reopening
+
+| Scenario | Observable result |
+| --- | --- |
+| Shipped behavior: second client uploads while owner is offline | Restart the original peer, reconnect and sync twice. Both endpoints have identical input bytes and revision. The result inventory is unchanged. Explicit demo-result creates the fixed output and a second call is already current. |
+| Shipped behavior: owner edited the same note offline | Reconnect and inspect the conflict. Both versions remain recoverable and resolution converges. Neither version triggers processing. |
+| Proposed preview: input changes after approval | Reject the stale approval, display the changed revision, preserve both the original recovery history and the new bytes, and require the owner to review the new input. |
+| Proposed preview: two clients request work or the acknowledgement is lost | Remote requests produce no grant. Duplicate authorized requests for the same binding identify the existing operation. After reconnect there is at most one result and its recorded digest matches. |
+| Proposed preview: another Castle has the same path and revision | Its token, grants and output are isolated. No bytes, result or approval cross the Castle boundary. Repeat against an installed named-Castle candidate before claiming this coverage. |
+| Proposed preview: cancel, disable or restart during processing | The owner sees the terminal or interrupted state and any previously committed result. Repeat sync and daemon restart create no additional output. Re-enabling requires a new approval. |
+| Proposed preview: malformed, oversized or out-of-policy input | Refuse before running the worker. A sandbox failure or exhausted limit leaves the source intact, no partial result, and an owner-visible reason. |
+
+Reopen the decision when an owner supplies a concrete workflow, eligible input and expected result, a Coven maintainer owns local approval and revocation, and the team can demonstrate isolation and crash-safe publication on the intended platforms. If those conditions lead to approval, split daemon authority and worker containment from Host result publication and interoperability tests. Until then, the operator contract is sync and recovery.
