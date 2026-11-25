@@ -35,7 +35,8 @@ for(const [id,title,group] of pages){
     return '<h'+depth+' id="'+slug+'">'+this.parser.parseInline(tokens)+'</h'+depth+'>';
   };
   const md=id?fs.readFileSync('../docs/'+id+'.md','utf8'):home;
-  const body=marked.parse(md.replace(/\]\((setup|install|operations|plan|acceptance)\.md/g,'](/$1/'),{renderer});
+  const linkedMarkdown = md.replaceAll('](../', '](https://github.com/OpenCoven/coven-host/blob/main/');
+  const body=marked.parse(linkedMarkdown.replace(/\]\((setup|install|operations|plan|acceptance)\.md/g,'](/$1/'),{renderer});
   const nav=pages.map(([path,label,section],i)=>(pages[i-1]?.[2]!==section?'<h3>'+section+'</h3>':'')+'<a '+(path===id?'aria-current="page"':'')+' href="/'+(path?path+'/':'')+'">'+label+'</a>').join('');
   const html=`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${title} · Coven Host Docs</title><link rel="canonical" href="https://docs.coven.host/${id?id+'/':''}"><link rel="icon" href="/crown.svg"><link rel="stylesheet" href="/style.css"></head><body><a class="skip" href="#content">Skip to content</a><header><a class="brand" href="/"><img src="/crown.svg" alt="">Coven Host <small>Docs</small></a><a href="https://github.com/OpenCoven/coven-host">GitHub</a></header><div class="layout"><aside><nav aria-label="Documentation">${nav}</nav></aside><details class="mobile"><summary>Documentation menu</summary><nav aria-label="Mobile documentation">${nav}</nav></details><main id="content"><div class="crumb">Documentation <i>/</i> ${group}</div>${body}<footer><a href="https://github.com/OpenCoven/coven-host${id?'/blob/main/docs/'+id+'.md':''}">View source on GitHub</a></footer></main><nav class="toc" aria-label="On this page"><h3>On this page</h3>${headings.map(([slug,text])=>'<a href="#'+slug+'">'+text+'</a>').join('')}</nav></div></body></html>`;
   fs.mkdirSync(out+'/'+id,{recursive:true});
