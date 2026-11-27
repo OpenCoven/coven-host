@@ -131,16 +131,23 @@ impl Client {
 
         let mut remote = self.remote(db)?;
         let conflicts = conflicts(db)?;
-        let initial = self.inventory(db, &mut remote)?;
-        check_history(db, &baseline(db)?, &conflicts, &initial, &remote)?;
-        let mut errors: Vec<_> = self
-            .flush_pending_delete(db, &remote)?
-            .into_iter()
-            .collect();
-        errors.extend(self.flush_pending(db, &remote)?);
-        let items = self.inventory(db, &mut remote)?;
-        let base = baseline(db)?;
+        let mut items = self.inventory(db, &mut remote)?;
+        let mut base = baseline(db)?;
         check_history(db, &base, &conflicts, &items, &remote)?;
+        let mut errors = Vec::new();
+        let replay = db.query_row(
+            "SELECT EXISTS(SELECT 1 FROM pending_delete) OR EXISTS(SELECT 1 FROM pending)",
+            [],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if replay {
+            errors.extend(self.flush_pending_delete(db, &remote)?);
+            errors.extend(self.flush_pending(db, &remote)?);
+            // A replay can advance the baseline or discover a competing write.
+            items = self.inventory(db, &mut remote)?;
+            base = baseline(db)?;
+            check_history(db, &base, &conflicts, &items, &remote)?;
+        }
         let all: BTreeSet<_> = scan
             .files
             .keys()

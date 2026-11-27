@@ -31,6 +31,8 @@ The candidate lets an owner keep demo and synchronize a second Castle with its o
 
 ## What can I pick up next?
 
+[Sync cost investigation #39](https://github.com/OpenCoven/coven-host/issues/39) is under review by BunsDev. With 256 files of 8 KiB each, the candidate reduced peer inventory reads from three to two for unchanged and one-file syncs. Lost-write acknowledgement recovery still needed three. Five loopback runs showed no wall-clock improvement: unchanged-sync medians were 38.0 ms on the baseline and 40.7 ms on the candidate. The next decision is whether eliminating a peer round trip warrants the change after recovery qualification.
+
 Operators with two authorized physical machines can claim the SSH recovery walkthrough in #12. Record the machines and package digests on the issue before starting. BunsDev approved [storage-only uploads](uploaded-documents.md). The document records the conditions for reconsidering local processing. [Physical SSH acceptance](https://github.com/OpenCoven/coven-host/issues/12) · [Design decision](https://github.com/OpenCoven/coven-host/pull/33)
 
 | Issue and outcome | Owner or resource | Next action | Evidence required to close |
