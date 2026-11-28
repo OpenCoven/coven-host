@@ -14,6 +14,8 @@ mod native;
 #[path = "folder/windows.rs"]
 mod native;
 use native::Dir;
+#[cfg(target_os = "macos")]
+mod macos_acl;
 mod previous;
 
 #[derive(Debug, Default)]
@@ -47,6 +49,8 @@ fn read_at(parent: &Dir, name: &OsStr, limit: usize, private: bool) -> Result<Ve
     let before = native::fingerprint(&file)?;
     if private {
         native::check_private(&file)?;
+        #[cfg(target_os = "macos")]
+        macos_acl::check_token_acl(&file)?;
     }
     ensure!(
         before.size <= limit as u64,

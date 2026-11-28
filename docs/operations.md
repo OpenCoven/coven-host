@@ -97,7 +97,7 @@ ssh -NT -o StrictHostKeyChecking=yes -o ExitOnForwardFailure=yes \
   -L 127.0.0.1:18765:127.0.0.1:8765 "$REMOTE"
 ```
 
-Tokens must contain 43–128 URL-safe characters. On Unix the current user must own the token file and its mode must be 600 or stricter.
+Tokens must contain 43–128 URL-safe characters. On Unix the current user must own the token file and its mode must be 600 or stricter. On macOS any ACL grants on the token file must be limited to its owner. If a connection is refused because of its ACL, inspect the token with `ls -le` and remove the non-owner grant. For a dedicated token file owned by you that should have no extended ACL, use `chmod -N "$TOKEN_FILE"` and `chmod 600 "$TOKEN_FILE"`, then retry the connection. A refused replacement leaves the previous connection configured.
 
 ## Sync and recover
 
