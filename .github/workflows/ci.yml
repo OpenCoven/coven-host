@@ -63,6 +63,7 @@ jobs:
         run: |
           python3 --version
           df -T "$RUNNER_TEMP" .
+      - run: bash tests/check-runner.sh
       - run: scripts/check.sh kit compat
 
   secrets:
