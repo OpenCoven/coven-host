@@ -7,11 +7,11 @@
 #   scripts/check.sh STEP...    run the named steps only: rust, hook, kit, compat
 set -euo pipefail
 
-cd "$(git rev-parse --show-toplevel)"
+script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+cd "$script_dir/.."
 
 usage() {
-    sed -n '2,7s/^# \{0,1\}//p' "$0" >&2
-    exit 2
+    sed -n '2,7s/^# \{0,1\}//p' "$script_dir/check.sh"
 }
 
 steps=()
@@ -20,8 +20,8 @@ for arg in "$@"; do
         --fast) steps+=(rust hook kit) ;;
         --full) steps+=(rust hook kit compat) ;;
         rust | hook | kit | compat) steps+=("$arg") ;;
-        -h | --help) usage ;;
-        *) echo "Unknown argument: $arg" >&2; usage ;;
+        -h | --help) usage; exit 0 ;;
+        *) echo "Unknown argument: $arg" >&2; usage >&2; exit 2 ;;
     esac
 done
 [ ${#steps[@]} -gt 0 ] || steps=(rust hook kit)
@@ -46,6 +46,9 @@ run() {
 }
 
 for step in "${steps[@]}"; do
+    case " ${passed[*]:-} ${not_run[*]:-} " in
+        *" $step "*) continue ;;
+    esac
     echo "== $step"
     case "$step" in
         rust)
