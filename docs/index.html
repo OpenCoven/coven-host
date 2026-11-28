@@ -24,14 +24,14 @@
         <a href="#faq">FAQ</a>
         <a href="#roadmap">Roadmap</a>
       </div>
-      <a class="docs-link" href="https://docs.opencoven.ai">Docs <span aria-hidden="true">↗</span></a>
+      <a class="docs-link" href="https://docs.coven.host">Docs <span aria-hidden="true">↗</span></a>
     </nav>
   </header>
   <main id="main">
     <section class="hero" aria-labelledby="hero-heading">
       <div class="wrap hero-grid">
         <div class="intro">
-          <p class="eyebrow"><span class="dot"></span>Coven Host <span class="separator">/</span> <a href="https://github.com/OpenCoven/coven-host/releases/tag/v0.1.1">v0.1.1</a></p>
+          <p class="eyebrow"><span class="dot"></span>Coven Host <span class="separator">/</span> <a href="https://github.com/OpenCoven/coven-host/releases/tag/v0.1.2">v0.1.2</a></p>
           <h1 id="hero-heading">Your folder,<br><em>in sync.</em></h1>
           <p class="lede">Save a document in your Coven folder. Host syncs it with a private peer on the same computer. Keep editing offline, or connect a Linux machine over SSH to exchange files across devices.</p>
           <div class="actions">
@@ -75,30 +75,30 @@
     </section>
     <section id="install" class="wrap section" aria-labelledby="install-heading">
       <div class="section-heading">
-        <div><p class="eyebrow">Desktop release · v0.1.1</p><h2 id="install-heading">Choose your installer.</h2></div>
+        <div><p class="eyebrow">Desktop release · v0.1.2</p><h2 id="install-heading">Choose your installer.</h2></div>
         <a class="text-link" href="https://github.com/OpenCoven/coven-host/blob/main/docs/setup.md">Full setup guide <span aria-hidden="true">↗</span></a>
       </div>
       <div class="packages">
         <div class="package">
           <h3>macOS</h3>
           <p>Apple silicon or Intel, macOS 11 or later. Unzip the download and open Coven Host.</p>
-          <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-macOS.zip">Download for Mac <span>ZIP ↓</span></a>
+          <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-macOS.zip">Download for Mac <span>ZIP ↓</span></a>
         </div>
         <div class="package">
           <h3>Windows</h3>
           <p>x64 or Windows 11 on ARM with x64 emulation. Run the installer, then open Coven Host from Start.</p>
-          <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-Windows-x64.exe">Download for Windows <span>EXE ↓</span></a>
+          <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Windows-x64.exe">Download for Windows <span>EXE ↓</span></a>
         </div>
         <div class="package">
           <h3>Ubuntu or Debian</h3>
           <p>Install the package for your processor, then open Coven Host from Applications.</p>
           <div class="linux-links">
-            <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-amd64.deb">Intel / AMD <span>DEB ↓</span></a>
-            <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-linux-arm64.deb">ARM64 <span>DEB ↓</span></a>
+            <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-amd64.deb">Intel / AMD <span>DEB ↓</span></a>
+            <a class="package-link" href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-linux-arm64.deb">ARM64 <span>DEB ↓</span></a>
           </div>
         </div>
       </div>
-      <p class="install-note">Installing offline? <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.1/Coven-Host-0.1.1-Offline.zip">Download the offline kit</a>, extract the whole ZIP, and open <code>Start-Here.html</code>.</p>
+      <p class="install-note">Installing offline? <a href="https://github.com/OpenCoven/coven-host/releases/download/v0.1.2/Coven-Host-0.1.2-Offline.zip">Download the offline kit</a>, extract the whole ZIP, and open <code>Start-Here.html</code>.</p>
     </section>
     <section id="start" class="operator-section" aria-labelledby="start-heading">
       <div class="wrap operator-grid">
@@ -133,7 +133,7 @@
         </details>
         <details>
           <summary>What happens when I delete or rename a file?</summary>
-          <p>The peer keeps its copy. Host reports the missing path so you can restore it deliberately. A rename uploads the new path and leaves the old one for resolution. <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/operations.md#sync-boundaries">Read the sync rules.</a></p>
+          <p>When both endpoints support deletion, the next sync creates the renamed path and removes the old one. If a deletion conflicts with an edit, Host keeps a recovery copy and lets you choose the outcome. <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/operations.md#recover-a-deletion-or-rename">Recover a deletion or rename.</a></p>
         </details>
         <details>
           <summary>Why was my file skipped?</summary>
@@ -141,16 +141,16 @@
         </details>
         <details>
           <summary>What if the installer won’t open?</summary>
-          <p>The Windows v0.1.1 installer is unsigned. Use the <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/acceptance.md#verify-a-release-download">checksum verification steps</a> if Windows shows a publisher warning. For other startup problems, the <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/setup.md#when-a-package-cannot-open">setup guide</a> covers platform requirements, portable Linux packages, and diagnostics.</p>
+          <p>The Windows v0.1.2 installer is unsigned. Use the <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/acceptance.md#verify-a-release-download">checksum verification steps</a> if Windows shows a publisher warning. For other startup problems, the <a href="https://github.com/OpenCoven/coven-host/blob/main/docs/setup.md#when-a-package-cannot-open">setup guide</a> covers platform requirements, portable Linux packages, and diagnostics.</p>
         </details>
       </div>
     </section>
     <section id="roadmap" class="wrap section" aria-labelledby="roadmap-heading">
       <div class="section-heading"><div><p class="eyebrow">Roadmap · <time datetime="2026-11-20">Nov 20, 2026</time></p><h2 id="roadmap-heading">Where Host goes next.</h2></div><a class="text-link" href="https://github.com/OpenCoven/coven-host/blob/main/docs/plan.md">Delivery plan <span aria-hidden="true">↗</span></a></div>
       <dl class="roadmap">
-        <div><dt><span class="dot"></span>Shipped</dt><dd><h3>One folder, one peer</h3><p>The v0.1.1 installers set up two-way sync and conflict recovery for the demo Castle. Desktop checks covered Apple silicon, Ubuntu, and Windows 11 on ARM with x64 emulation.</p><a class="text-link" href="https://github.com/OpenCoven/coven-host/blob/main/docs/acceptance.md#desktop-installers">See tested platforms and limits <span aria-hidden="true">↗</span></a></dd></div>
-        <div><dt><span class="dot next"></span>In review</dt><dd><h3>Upstream Coven integration</h3><p>The Host release includes the CLI and daemon. The integration is open for maintainer review before it can ship through Coven’s own packages.</p><a class="text-link" href="https://github.com/OpenCoven/coven/pull/1809">Follow the upstream review <span aria-hidden="true">↗</span></a></dd></div>
-        <div><dt><span class="dot later"></span>Proposed</dt><dd><h3>Beyond the demo Castle</h3><p>Open proposals cover <a href="https://github.com/OpenCoven/coven-host/issues/7">additional Castles</a>, <a href="https://github.com/OpenCoven/coven-host/issues/6">multiple clients</a>, <a href="https://github.com/OpenCoven/coven-host/issues/5">deletion and rename propagation</a>, and <a href="https://github.com/OpenCoven/coven-host/issues/8">execution of uploaded documents</a>.</p></dd></div>
+        <div><dt><span class="dot"></span>Shipped</dt><dd><h3>One folder, one peer</h3><p>Two clients can use the v0.1.2 installers to synchronize one owner’s Castle, including offline renames and deletions. Recovery passed on Apple silicon, Linux x64 and ARM64, and Windows x64 on NTFS.</p><a class="text-link" href="https://github.com/OpenCoven/coven-host/blob/main/docs/acceptance.md#desktop-installers">See tested platforms and limits <span aria-hidden="true">↗</span></a></dd></div>
+        <div><dt><span class="dot"></span>Merged</dt><dd><h3>Upstream Coven integration</h3><p>The Host release includes the CLI and daemon. The deletion support in these installers has merged into Coven main.</p><a class="text-link" href="https://github.com/OpenCoven/coven/pull/1815">View the merged integration <span aria-hidden="true">↗</span></a></dd></div>
+        <div><dt><span class="dot later"></span>Proposed</dt><dd><h3>Beyond the demo Castle</h3><p>Open proposals cover <a href="https://github.com/OpenCoven/coven-host/issues/7">additional Castles</a> and <a href="https://github.com/OpenCoven/coven-host/issues/8">execution of uploaded documents</a>.</p></dd></div>
       </dl>
     </section>
   </main>

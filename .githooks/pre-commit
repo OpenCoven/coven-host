@@ -6,12 +6,7 @@ if ! command -v gitleaks >/dev/null 2>&1; then
     exit 1
 fi
 
-# Private token files and binary keystores can lack scannable text.
-if ! git diff --cached --quiet --no-renames --diff-filter=ACMT -- \
-    ':(icase,glob)**/access/token' ':(icase,glob)**/*.p12' ':(icase,glob)**/*.pfx' \
-    ':(icase,glob)**/.env' ':(icase,glob)**/.env.local' ':(icase,glob)**/.env.*.local' \
-    ':(icase,glob)**/host.sqlite' ':(icase,glob)**/host.sqlite-*' \
-    ':(icase,glob)**/client.sqlite' ':(icase,glob)**/client.sqlite-*'; then
+if ! "$(git rev-parse --show-toplevel)/.githooks/check-private-paths" diff --cached --quiet --no-renames --diff-filter=ACMT; then
     echo "Commit blocked. Check staged paths for a credential file, keystore or private sync database." >&2
     exit 1
 fi

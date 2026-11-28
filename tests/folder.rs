@@ -95,9 +95,6 @@ fn macos_token_acl_limits_grants_to_the_owner() {
     fs::set_permissions(&token, fs::Permissions::from_mode(0o600)).unwrap();
     assert_eq!(token_from(&token).unwrap(), contents);
 
-    let owner = Command::new("/usr/bin/id").arg("-un").output().unwrap();
-    assert!(owner.status.success());
-    let owner = std::str::from_utf8(&owner.stdout).unwrap().trim();
     let add_entry = |entry: &str| {
         let output = Command::new("/bin/chmod")
             .args(["+a", entry])
@@ -115,7 +112,6 @@ fn macos_token_acl_limits_grants_to_the_owner() {
         );
     };
     add_entry("everyone deny writeattr");
-    add_entry(&format!("user:{owner} allow read"));
     assert_eq!(token_from(&token).unwrap(), contents);
 
     add_entry("everyone allow readattr");

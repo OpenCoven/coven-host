@@ -23,8 +23,8 @@ using Microsoft.Win32;
 
 [assembly: AssemblyTitle("Coven Host")]
 [assembly: AssemblyCompany("OpenCoven")]
-[assembly: AssemblyVersion("0.1.1.0")]
-[assembly: AssemblyFileVersion("0.1.1.0")]
+[assembly: AssemblyVersion("0.1.2.0")]
+[assembly: AssemblyFileVersion("0.1.2.0")]
 
 internal sealed class SetupFailure : Exception
 {
@@ -35,8 +35,7 @@ internal sealed class SetupFailure : Exception
 
 internal sealed class Setup
 {
-    internal const string Version = "0.1.1";
-    const string CliHash = "1e7a6e20030d01492e60607ec7b9916a26b4bdbc4ccc2c1594877fd50c5786cf";
+    internal const string Version = "0.1.2";
     readonly string app = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenCoven", "Coven Host");
     internal string Root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Coven");
     internal string Report { get; private set; }
@@ -44,6 +43,7 @@ internal sealed class Setup
     string Bin { get { return Path.Combine(app, Version); } }
     string Launcher { get { return Path.Combine(Bin, "Coven Host.exe"); } }
     string Cli { get { return Path.Combine(Bin, "coven.exe"); } }
+    string PreviousCli { get { return Path.Combine(app, "0.1.1", "coven.exe"); } }
     string State { get { return Path.Combine(app, "local-peer"); } }
     string Token { get { return Path.Combine(State, "access.token"); } }
     string Server { get { return Path.Combine(State, "server"); } }
@@ -65,6 +65,14 @@ internal sealed class Setup
         Step("CH-W01", "Open setup", "Close another Coven Host setup window, then select Retry.");
         try
         {
+            using (var identity = WindowsIdentity.GetCurrent())
+            {
+                if (identity.Owner != identity.User)
+                {
+                    Step("CH-W12", "Check the Windows account", "Close this window and open the installer from File Explorer in your regular Windows session. If the message returns, ask your Windows administrator for a session that creates files owned by your account.");
+                    Fail("This Windows session assigns newly created files to a group. Private recovery files require your account as their owner.");
+                }
+            }
             using (var guard = new Mutex(false, @"Local\OpenCoven.Host.Setup." + WindowsIdentity.GetCurrent().User.Value))
             {
                 bool held;
@@ -171,10 +179,10 @@ internal sealed class Setup
                 using (var src = Assembly.GetExecutingAssembly().GetManifestResourceStream("cli.gz"))
                 using (var zip = new GZipStream(src, CompressionMode.Decompress))
                 using (var dst = File.Create(temp)) zip.CopyTo(dst);
-                if (Hash(temp) != CliHash) Fail("The embedded CLI did not match its release hash.");
+                if (Hash(temp) != QualifiedPayload.Sha256) Fail("The embedded CLI did not match its release hash.");
             }, false);
         }
-        if (Hash(Cli) != CliHash)
+        if (Hash(Cli) != QualifiedPayload.Sha256)
             Fail("The installed CLI has an unexpected SHA-256. Move the versioned application directory aside after closing its processes, then reopen the installer.");
         string self = Assembly.GetExecutingAssembly().Location;
         Ordinary(Launcher);
@@ -306,6 +314,12 @@ internal sealed class Setup
     {
         var result = ReadDaemonStatus();
         if (result.Exit != 0 && result.Error.Contains("client is not initialized")) return null;
+        if (result.Exit != 0 && result.Error.Contains("Castle ownership is unverified") && File.Exists(PortFile) && Directory.Exists(Root))
+        {
+            // Native init verifies the original configured root before claiming a historical profile.
+            Success(RunCli("host", "init", "--root", Root));
+            result = ReadDaemonStatus();
+        }
         Success(result);
         var status = new JavaScriptSerializer { MaxJsonLength = 32 * 1024 * 1024 }.Deserialize<Dictionary<string, object>>(result.Output);
         if (status == null || !status.ContainsKey("remote") || !(status["root"] is string))
@@ -379,7 +393,7 @@ internal sealed class Setup
         throw new IOException("Cannot size TCP listener table");
     }
 
-    Process Recorded(string role)
+    Process Recorded(string role, string executable = null)
     {
         var path = Path.Combine(State, role + ".pid");
         Ordinary(path);
@@ -391,7 +405,7 @@ internal sealed class Setup
         try { p = Process.GetProcessById(pid); } catch (ArgumentException) { return null; }
         try
         {
-            if (p.StartTime.ToUniversalTime().Ticks == started && String.Equals(p.MainModule.FileName, Cli, StringComparison.OrdinalIgnoreCase)) return p;
+            if (p.StartTime.ToUniversalTime().Ticks == started && String.Equals(p.MainModule.FileName, executable ?? Cli, StringComparison.OrdinalIgnoreCase)) return p;
         }
         catch (InvalidOperationException) { }
         catch (System.ComponentModel.Win32Exception) { }
@@ -450,7 +464,19 @@ internal sealed class Setup
         else
         {
             Step("CH-W02", "Verify installed application", "Run the release installer again to restore a missing CLI. If an installed binary was modified, verify the release checksum before replacing it.");
-            if (!File.Exists(Cli) || Hash(Cli) != CliHash) Fail("The installed CLI is missing or damaged.");
+            if (!File.Exists(Cli) || Hash(Cli) != QualifiedPayload.Sha256) Fail("The installed CLI is missing or damaged.");
+        }
+        if (File.Exists(PreviousCli) && File.Exists(PortFile))
+        {
+            using (var previousPeer = Recorded("peer", PreviousCli))
+            using (var previousWatcher = Recorded("watch", PreviousCli))
+            {
+                if (previousPeer != null || previousWatcher != null)
+                {
+                    Step("CH-W11", "Finish the version upgrade", "Save your work, sign out of Windows and sign back in. Coven Host will resume with the same folder and peer.");
+                    Fail("The earlier Coven Host login session is still running. The new installer is registered for your next sign-in.");
+                }
+            }
         }
         Step("CH-W03", "Check folder configuration", "Open your existing Coven application and check daemon availability. Verify that your configured folder and state are accessible, then select Retry.");
         var status = Status();

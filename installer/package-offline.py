@@ -6,7 +6,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from zipfile import ZipFile, ZipInfo
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 PREFIX = f"Coven-Host-{VERSION}-"
 INSTALLERS = [
     PREFIX + suffix for suffix in (

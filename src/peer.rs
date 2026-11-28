@@ -1,4 +1,4 @@
-//! Authenticated client for the single-Castle HTTP protocol.
+//! Authenticated client for the Castle-scoped HTTP protocol.
 use std::{collections::BTreeMap, fmt, io::Read, time::Duration};
 
 use anyhow::{Context, Result, bail, ensure};
@@ -10,12 +10,11 @@ use reqwest::{
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use crate::{MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
+use crate::{CastleId, MAX_FILE, MAX_FILES, MAX_TOTAL, digest, validate_path};
 
 mod server;
-pub use server::serve;
+pub use server::{serve, serve_castles};
 
-const PREFIX: &str = "/v1/castles/demo/files";
 const TIMEOUT: Duration = Duration::from_secs(5);
 const INVENTORY_LIMIT: usize = 1024 * 1024;
 const REVISION_LIMIT: i64 = 1_000_000_000_000_000_000;
@@ -67,6 +66,8 @@ struct Row {
 struct Inventory {
     host: String,
     files: Vec<Row>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    deleted: Option<BTreeMap<String, i64>>,
 }
 
 #[derive(Debug)]
@@ -116,10 +117,20 @@ pub struct Peer {
     client: Client,
     base: String,
     pub identity: Option<String>,
+    pub(crate) deleted: Option<BTreeMap<String, i64>>,
 }
 
 impl Peer {
     pub fn new(url: &str, token: String, identity: Option<String>) -> Result<Self> {
+        Self::for_castle(&CastleId::default(), url, token, identity)
+    }
+
+    pub fn for_castle(
+        castle: &CastleId,
+        url: &str,
+        token: String,
+        identity: Option<String>,
+    ) -> Result<Self> {
         endpoint(url)?;
         let mut authorization = HeaderValue::from_str(&format!("Bearer {token}"))
             .map_err(|_| anyhow::anyhow!("invalid token file format"))?;
@@ -134,8 +145,9 @@ impl Peer {
             .build()?;
         Ok(Self {
             client,
-            base: format!("{}{PREFIX}", url.trim_end_matches('/')),
+            base: format!("{}{}", url.trim_end_matches('/'), castle.route()),
             identity,
+            deleted: None,
         })
     }
 
@@ -181,9 +193,14 @@ impl Peer {
     }
 
     pub fn inventory(&mut self) -> Result<BTreeMap<String, Item>> {
-        let (body, _) = self.request(Method::GET, None, HeaderMap::new(), None, INVENTORY_LIMIT)?;
-        let Inventory { host, files } =
-            serde_json::from_slice(&body).context("invalid host inventory")?;
+        let mut headers = HeaderMap::new();
+        headers.insert("x-coven-deletions", HeaderValue::from_static("1"));
+        let (body, _) = self.request(Method::GET, None, headers, None, INVENTORY_LIMIT * 3)?;
+        let Inventory {
+            host,
+            files,
+            deleted,
+        } = serde_json::from_slice(&body).context("invalid host inventory")?;
         ensure!(
             lower_hex(&host, 32) && files.len() <= MAX_FILES,
             "invalid host inventory"
@@ -212,6 +229,17 @@ impl Peer {
                 "duplicate path in host inventory"
             );
         }
+        if let Some(entries) = &deleted {
+            ensure!(entries.len() <= 2000, "invalid deletion inventory");
+            for (path, rev) in entries {
+                validate_path(path)?;
+                ensure!(
+                    (2..REVISION_LIMIT).contains(rev) && !result.contains_key(path),
+                    "invalid deleted path metadata"
+                );
+            }
+        }
+        self.deleted = deleted;
         self.identity = Some(host);
         Ok(result)
     }
@@ -226,6 +254,24 @@ impl Peer {
             "{path}: host file changed or transfer failed verification; sync again"
         );
         Ok(data)
+    }
+
+    pub fn delete(&self, path: &str, expected: i64, operation: &str) -> Result<()> {
+        ensure!(
+            (1..REVISION_LIMIT).contains(&expected),
+            "invalid host revision"
+        );
+        ensure!(lower_hex(operation, 32), "invalid operation ID");
+        let mut headers = HeaderMap::new();
+        headers.insert("if-match", format!("\"{expected}\"").parse()?);
+        headers.insert("x-sync-operation", operation.parse()?);
+        let (body, _) = self.request(Method::DELETE, Some(path), headers, None, INVENTORY_LIMIT)?;
+        let ack: serde_json::Value = serde_json::from_slice(&body)?;
+        ensure!(
+            ack == json!({"revision": expected + 1, "deleted": true}),
+            "invalid deletion acknowledgement; retry reconciliation"
+        );
+        Ok(())
     }
 
     pub fn upload(

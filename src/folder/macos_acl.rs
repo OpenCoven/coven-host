@@ -149,7 +149,12 @@ mod tests {
         file.write_all(contents.as_bytes())?;
         // SAFETY: geteuid has no arguments or memory preconditions.
         let uid = unsafe { libc::geteuid() };
+        let mut account = [0u8; 16];
+        // SAFETY: account holds a writable Darwin UUID.
+        let status = unsafe { mbr_uid_to_uuid(uid, account.as_mut_ptr()) };
+        ensure!(status == 0, "owner UUID lookup failed with {status}");
         for principal in [
+            uuid::Uuid::from_bytes(account).to_string(),
             "ABCDEFAB-CDEF-ABCD-EFAB-CDEF0000000A".to_owned(),
             format!("FFFFEEEE-DDDD-CCCC-BBBB-AAAA{uid:08X}"),
         ] {

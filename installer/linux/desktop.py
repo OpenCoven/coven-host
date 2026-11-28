@@ -18,9 +18,10 @@ import subprocess
 import sys
 import tempfile
 import time
+import traceback
 from pathlib import Path
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 HOME = Path.home()
 ROOT = HOME / "Coven"
 STATE = HOME / ".local/state/coven-host-desktop"
@@ -218,7 +219,8 @@ def quoted(value, desktop=False):
     return '"' + raw.replace("$", "$$") + '"'
 
 
-def register(app, backend):
+def service_entries(app, backend, menu):
+    entries = {}
     py = quoted(app / "desktop.py")
     unit = (f"[Unit]\nDescription=Coven Host local peer and folder sync\n\n[Service]\nType=notify\n"
             f"ExecStart=/usr/bin/env python3 -I {py} service\nUMask=0077\nRestart=on-failure\n"
@@ -227,17 +229,80 @@ def register(app, backend):
     config = Path(os.environ.get("XDG_CONFIG_HOME") or HOME / ".config")
     unit_path = config / "systemd/user" / UNIT
     if backend == "systemd":
-        fixed_file(unit_path, unit)
+        entries[unit_path] = unit
     else:
-        fixed_file(config / "autostart/org.opencoven.CovenHost.desktop",
-                   "[Desktop Entry]\nType=Application\nName=Coven Host sync\nTerminal=false\n"
+        entries[config / "autostart/org.opencoven.CovenHost.desktop"] = ("[Desktop Entry]\nType=Application\nName=Coven Host sync\nTerminal=false\n"
                    f"Exec=/usr/bin/env python3 -I {quoted(app / 'desktop.py', True)} session\n")
-    if app == PORTABLE:
+    if menu:
         data = Path(os.environ.get("XDG_DATA_HOME") or HOME / ".local/share")
         cmd = "/usr/bin/env python3 -I " + quoted(app / "desktop.py", True) + " launch"
-        fixed_file(data / "applications/org.opencoven.CovenHost.desktop",
-                   "[Desktop Entry]\nType=Application\nName=Coven Host\nIcon=folder\nTerminal=false\nCategories=Utility;FileTools;\n"
+        entries[data / "applications/org.opencoven.CovenHost.desktop"] = ("[Desktop Entry]\nType=Application\nName=Coven Host\nIcon=folder\nTerminal=false\nCategories=Utility;FileTools;\n"
                    f"Exec={cmd}\nActions=Diagnostics;\n\n[Desktop Action Diagnostics]\nName=Show diagnostics\nExec={cmd} --diagnostics\n")
+
+    return entries
+
+
+def register(app, backend, upgrading):
+    entries = service_entries(app, backend, app == PORTABLE)
+    prior = service_entries(PORTABLE.parent / "0.1.1", backend, True) if upgrading else {}
+    replacements = set()
+    for path, data in entries.items():
+        if not present(path):
+            continue
+        require(regular(path) and path.stat().st_uid == os.getuid(), "ENTRY", "register the application",
+                "owned service or menu entry", "existing entry differs", DB_HELP)
+        current = path.read_text()
+        if current != data:
+            require(current == prior.get(path), "ENTRY", "register the application",
+                    "original installer entry", "existing entry differs", DB_HELP)
+            replacements.add(path)
+    for path, data in entries.items():
+        if path in replacements:
+            write_file(path, data.encode())
+        else:
+            fixed_file(path, data)
+
+
+def retire_previous_service(backend, unit):
+    # Only the installer-owned profile with the original folder, storage and token reaches this point.
+    if backend == "systemd":
+        manager()
+        if controlled("systemctl", "--user", "is-active", "--quiet", UNIT).returncode == 0:
+            fragment = controlled("systemctl", "--user", "show", "-p", "FragmentPath", "--value", UNIT)
+            require(fragment.returncode == 0 and os.fsdecode(fragment.stdout.strip()) == str(unit),
+                    "ENTRY", "inspect the previous service", "original user service", "unit location differs", DB_HELP)
+            success(controlled("systemctl", "--user", "stop", UNIT), "SERVICE", "stop the previous service",
+                    "stopped installer service", "systemd could not stop the service", RETRY)
+    elif session_ready():
+        # A pidfd binds the signal to the process inspected here, even if its PID is subsequently reused.
+        relogin = "Sign out of Linux, sign back in, and open Coven Host to finish the upgrade."
+        require(hasattr(os, "pidfd_open") and hasattr(signal, "pidfd_send_signal"),
+                "LOGIN", "upgrade the running service", "a restartable login service", "login restart required", relogin)
+        pid = int((STATE / "session-ready").read_text())
+        handle = None
+        try:
+            handle = os.pidfd_open(pid)
+            process = Path("/proc", str(pid))
+            args = (process / "cmdline").read_bytes().rstrip(b"\0").split(b"\0")
+            scripts = [os.fsencode(directory / "desktop.py") for directory in (SYSTEM, PORTABLE, PORTABLE.parent / "0.1.1")]
+            require(process.stat().st_uid == os.getuid() and len(args) == 4 and args[1] == b"-I"
+                    and args[2] in scripts and args[3] == b"session",
+                    "SERVICE", "identify the previous service", "installer-owned supervisor", "process differs", relogin)
+            signal.pidfd_send_signal(handle, signal.SIGTERM)
+        except OSError as err:
+            if err.errno not in (errno.ENOSYS, errno.EPERM, errno.EACCES):
+                raise
+            raise Problem("LOGIN", "upgrade the running service", "a restartable login service",
+                          "login restart required", relogin, detail=errno.errorcode[err.errno]) from err
+        finally:
+            if handle is not None:
+                os.close(handle)
+        deadline = time.monotonic() + 15
+        while session_ready() and time.monotonic() < deadline:
+            time.sleep(0.1)
+        require(not session_ready(), "SERVICE", "stop the previous service", "stopped supervisor", "still running", relogin)
+    success(controlled(HERE / "coven", "daemon", "stop"), "DAEMON", "stop the previous profile daemon",
+            "stopped installer daemon", "daemon did not stop", RETRY)
 
 
 def controlled(*args, timeout=100):
@@ -293,7 +358,7 @@ def prepare():
         with tempfile.TemporaryDirectory(dir=STATE.parent) as temp:
             staged = Path(temp) / "state"
             staged.mkdir(mode=0o700)
-            (staged / "access-token").write_text(secrets.token_urlsafe(48) + "\n")
+            write_file(staged / "access-token", (secrets.token_urlsafe(48) + "\n").encode("ascii"))
             (staged / "desktop.json").write_text(json.dumps({"owner": "Coven Host Desktop", "port": port}))
             staged.rename(STATE)
     private(STATE)
@@ -384,10 +449,10 @@ def service(systemd):
                 "the bundled peer on its saved loopback port", "peer failed to listen",
                 "Close any program using the saved peer port, then reopen Coven Host. If this repeats, send support this report.",
                 f"peer exit {peer.returncode}" if peer.returncode is not None else "peer readiness timed out")
+        if not present(DB) or not present(ROOT / ".coven-profile"):
+            success(command("init", "--root", ROOT), "INIT", "initialize the folder",
+                    "an initialized folder", "folder setup failed", RETRY)
         if not record.get("ready"):
-            if not present(DB):
-                success(command("init", "--root", ROOT), "INIT", "initialize the folder",
-                        "an initialized folder", "folder setup failed", RETRY)
             status = command("status")
             success(status, "STATUS", "inspect client configuration", "readable client state", "client unavailable", RETRY)
             if json.loads(status.stdout).get("remote") is None:
@@ -396,7 +461,9 @@ def service(systemd):
             result = command("sync")
             if result.returncode:
                 raise sync_problem(result.stdout, result.returncode)
+        if not record.get("ready") or record.get("desktopVersion") != VERSION:
             record["ready"] = True
+            record["desktopVersion"] = VERSION
             write_file(STATE / "desktop.json", json.dumps(record).encode())
         watch = start_child("watch")
         children.append(watch)
@@ -492,9 +559,10 @@ def launch(portable, diagnostics, foreground):
             for candidate in (SYSTEM, PORTABLE):
                 if candidate != app and candidate.is_dir() and quoted(candidate / "desktop.py") in unit.read_text():
                     verify(candidate)
-                    app = candidate
-                    break
-        prepare()
+                    if (candidate / "platform.json").read_bytes() == (HERE / "platform.json").read_bytes():
+                        app = candidate
+                        break
+        record, _ = prepare()
         backend_file = STATE / "startup"
         if regular(backend_file):
             backend = backend_file.read_text()
@@ -502,8 +570,11 @@ def launch(portable, diagnostics, foreground):
             backend = "systemd" if has_manager() else "session"
             fixed_file(backend_file, backend)
         require(backend in ("systemd", "session"), "STARTUP", "read startup settings", "known startup method", "unknown startup method", DB_HELP)
-        register(app, backend)
+        upgrading = bool(record.get("ready") and record.get("desktopVersion") != VERSION)
+        register(app, backend, upgrading)
         runtime_env()
+        if upgrading:
+            retire_previous_service(backend, unit)
         if backend == "systemd":
             manager()
             success(controlled("systemctl", "--user", "daemon-reload"), "REGISTER", "load the user service",
@@ -567,8 +638,11 @@ def main():
             problem = Problem("TIMEOUT", "wait for setup", "timely response", "operation timed out", RETRY)
         elif isinstance(err, OSError):
             kind = errno.errorcode.get(err.errno, "OS error")
+            # A source location is reproducible across installations and contains no profile or file names.
+            frames = [f for f in traceback.extract_tb(err.__traceback__) if f.filename == __file__]
+            location = " in desktop.py " + " > ".join(f"{frame.name}:{frame.lineno}" for frame in frames[-4:]) if frames else ""
             problem = Problem("STORAGE", "access local resources", "readable and writable local resources", kind,
-                              "Check free disk space and user permissions, then reopen Coven Host.", f"errno {err.errno}")
+                              "Check free disk space and user permissions, then reopen Coven Host.", f"errno {err.errno}{location}")
         else:
             problem = Problem("RUNTIME", "run setup", "valid installation and runtime", type(err).__name__, RETRY)
         body = report(problem)

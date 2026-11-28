@@ -1,0 +1,6 @@
+#!/bin/sh
+# Append the shared private-path policy to a Git change query.
+exec git "$@" -- ':(icase,glob)**/access/token' ':(icase,glob)**/*.p12' ':(icase,glob)**/*.pfx' \
+    ':(icase,glob)**/.env' ':(icase,glob)**/.env.local' ':(icase,glob)**/.env.*.local' \
+    ':(icase,glob)**/host.sqlite' ':(icase,glob)**/host.sqlite-*' \
+    ':(icase,glob)**/client.sqlite' ':(icase,glob)**/client.sqlite-*'
